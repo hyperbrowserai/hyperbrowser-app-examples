@@ -1,5 +1,9 @@
 
 
+
+https://github.com/user-attachments/assets/d2e89f88-5a6e-491a-8b52-6674d66c64b9
+
+
 # Hyperplexity - AI Search Engine
 
 A Perplexity-style AI search engine built with Next.js, featuring real-time web search, AI-powered answers, and smooth animations.
