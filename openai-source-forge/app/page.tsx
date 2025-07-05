@@ -8,6 +8,8 @@ interface Citation {
   url: string
   title: string
   quote: string
+  domain: string
+  isAcademic: boolean
   endpoints: Array<{
     method: string
     url: string
@@ -22,6 +24,7 @@ interface ResearchResult {
   endpointManifest: any
   zipFile: string
   creditsUsed: number
+  questionType: string
   stats: {
     sources: number
     endpoints: number
@@ -144,6 +147,27 @@ export default function HomePage() {
   const renderAnswerWithCitations = (markdown: string, citations: Citation[]) => {
     let html = markdown
 
+    // First, clean up the markdown to remove unwanted content
+    // Remove base64 images and data URIs
+    html = html.replace(/!\[.*?\]\(data:image\/[^)]+\)/g, '')
+    html = html.replace(/data:image\/[^)]+/g, '')
+    
+    // Remove image markdown but keep alt text
+    html = html.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    
+    // Remove HTML img tags
+    html = html.replace(/<img[^>]*>/gi, '')
+    
+    // Remove any remaining HTML tags except basic formatting
+    html = html.replace(/<(?!\/?(b|strong|i|em|u|br|p|div|span|h[1-6]|ul|ol|li|code|pre))[^>]*>/gi, '')
+    
+    // Remove links that are just images or logos
+    html = html.replace(/\[!\[.*?\]\([^)]+\)\]\([^)]+\)/g, '')
+    
+    // Remove "References" section from the main content (we'll show it separately)
+    html = html.replace(/## References[\s\S]*$/i, '')
+    html = html.replace(/# References[\s\S]*$/i, '')
+    
     // Convert markdown to basic HTML
     html = html.replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold text-white mb-3 mt-6">$1</h3>')
     html = html.replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold text-white mb-4 mt-8">$1</h2>')
@@ -161,20 +185,30 @@ export default function HomePage() {
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
     html = html.replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
     
+    // Clean up excessive whitespace
+    html = html.replace(/\s+/g, ' ')
+    html = html.replace(/\n\s*\n/g, '\n\n')
+    
     // Handle line breaks
     html = html.replace(/\n\n/g, '</p><p class="mb-4 text-gray-300 leading-relaxed">')
     html = `<p class="mb-4 text-gray-300 leading-relaxed">${html}</p>`
 
-    // Handle citations with hover tooltips
+    // Handle citations with clickable links and enhanced tooltips
     citations.forEach(citation => {
       const citationRegex = new RegExp(`\\[${citation.id}\\]`, 'g')
+      const academicBadge = citation.isAcademic ? '<span class="text-xs bg-blue-500/20 text-blue-400 px-1 rounded">Academic</span>' : ''
+      
       html = html.replace(citationRegex, `
         <span class="citation-hover inline-block">
-          <span class="bg-accent text-black px-2 py-1 rounded-full text-xs font-bold cursor-help">[${citation.id}]</span>
+          <a href="${citation.url}" target="_blank" rel="noopener noreferrer" 
+             class="bg-accent text-black px-2 py-1 rounded-full text-xs font-bold cursor-pointer hover:bg-accent/80 transition-colors">
+            [${citation.id}]
+          </a>
           <div class="citation-tooltip">
             <div class="font-semibold text-white mb-1">${citation.title}</div>
-            <div class="text-xs text-gray-300 mb-2">${citation.quote.substring(0, 100)}...</div>
-            <div class="text-xs text-accent">${citation.endpoints.length} API endpoints</div>
+            <div class="text-xs text-gray-300 mb-2">${citation.quote.substring(0, 120)}...</div>
+            <div class="text-xs text-accent mb-1">${citation.domain}</div>
+            ${academicBadge}
           </div>
         </span>
       `)
@@ -340,6 +374,63 @@ export default function HomePage() {
                 className="prose prose-invert max-w-none"
               />
             </div>
+
+            {/* References */}
+            {result.citations.length > 0 && (
+              <div className="glass-card rounded-2xl p-8">
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                  <ExternalLink className="w-6 h-6 text-accent mr-3" />
+                  References
+                </h2>
+                <div className="space-y-4">
+                  {result.citations.map((citation, index) => (
+                    <div key={citation.id} className="border-l-4 border-accent/30 pl-4 py-2">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-accent text-black px-2 py-1 rounded-full text-xs font-bold">
+                              [{citation.id}]
+                            </span>
+                            {citation.isAcademic && (
+                              <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
+                                Academic Source
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="font-semibold text-white mb-2 leading-tight">
+                            {citation.title}
+                          </h3>
+                          <p className="text-sm text-gray-300 mb-3 leading-relaxed">
+                            {citation.quote}
+                          </p>
+                          <div className="flex items-center gap-4 text-xs text-gray-400">
+                            <span className="flex items-center gap-1">
+                              <ExternalLink className="w-3 h-3" />
+                              {citation.domain}
+                            </span>
+                            {citation.endpoints.length > 0 && (
+                              <span className="flex items-center gap-1">
+                                <Database className="w-3 h-3" />
+                                {citation.endpoints.length} API endpoints
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <a
+                          href={citation.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-4 bg-accent/20 hover:bg-accent/30 text-accent px-3 py-1 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Visit
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Downloads */}
             <div className="glass-card rounded-2xl p-8">

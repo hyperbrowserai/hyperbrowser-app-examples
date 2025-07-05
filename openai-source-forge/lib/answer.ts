@@ -6,6 +6,8 @@ export interface Citation {
   url: string
   title: string
   quote: string
+  domain: string
+  isAcademic: boolean
   endpoints: Array<{
     method: string
     url: string
@@ -26,6 +28,49 @@ function getOpenAIClient() {
   return new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   })
+}
+
+function extractDomain(url: string): string {
+  try {
+    const domain = new URL(url).hostname
+    return domain.replace('www.', '')
+  } catch (error) {
+    return 'unknown'
+  }
+}
+
+function checkIfAcademicSource(url: string): boolean {
+  const academicDomains = [
+    'scholar.google.com',
+    'pubmed.ncbi.nlm.nih.gov',
+    'ncbi.nlm.nih.gov',
+    'researchgate.net',
+    'ieeexplore.ieee.org',
+    'arxiv.org',
+    'medlineplus.gov',
+    'nih.gov',
+    'springer.com',
+    'nature.com',
+    'sciencedirect.com',
+    'jstor.org',
+    'wiley.com',
+    'tandfonline.com',
+    'plos.org',
+    'bmj.com',
+    'nejm.org',
+    'jama.jamanetwork.com',
+    'sciencemag.org',
+    'cell.com',
+    'frontiersin.org',
+    'mdpi.com',
+    'academic.oup.com',
+    'cambridge.org',
+    'sage.com',
+    'acm.org',
+    'mitpressjournals.org'
+  ]
+  
+  return academicDomains.some(domain => url.includes(domain))
 }
 
 export async function generateAnswer(
@@ -56,7 +101,9 @@ Guidelines:
 - Be comprehensive but concise
 - Focus on answering the specific question asked
 - If technical information is available, include it
-- Use a professional but accessible tone`
+- Use a professional but accessible tone
+- DO NOT include a "References" or "Sources" section in your answer - citations will be displayed separately
+- Keep your answer clean and focused on content, not source listings`
 
   const userPrompt = `Question: ${query}
 
@@ -94,11 +141,16 @@ Please provide a comprehensive answer to the question using these sources. Inclu
       const source = sources[id - 1]
       if (!source) return null
       
+      const domain = extractDomain(source.url)
+      const isAcademic = checkIfAcademicSource(source.url)
+      
       return {
         id,
         url: source.url,
         title: source.title,
         quote: source.quote,
+        domain,
+        isAcademic,
         endpoints: source.endpoints.map(ep => ({
           method: ep.method,
           url: ep.url,
