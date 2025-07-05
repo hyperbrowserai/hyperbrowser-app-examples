@@ -73,6 +73,55 @@ function checkIfAcademicSource(url: string): boolean {
   return academicDomains.some(domain => url.includes(domain))
 }
 
+function cleanQuoteContent(content: string): string {
+  if (!content) return 'Content excerpt from this source'
+  
+  let cleaned = content
+  
+  // Remove base64 encoded images and data URIs
+  cleaned = cleaned.replace(/data:image\/[^)\s]+/g, '')
+  
+  // Remove markdown image syntax
+  cleaned = cleaned.replace(/!\[.*?\]\([^)]*\)/g, '')
+  
+  // Remove HTML img tags
+  cleaned = cleaned.replace(/<img[^>]*>/gi, '')
+  
+  // Remove HTML tags except basic formatting
+  cleaned = cleaned.replace(/<(?!\/?(b|strong|i|em|u|br|p|div|span|code|pre))[^>]*>/gi, '')
+  
+  // Remove markdown link syntax that's incomplete
+  cleaned = cleaned.replace(/\[!\[.*?\]\([^)]*\)\]/g, '')
+  
+  // Remove orphaned brackets and parentheses
+  cleaned = cleaned.replace(/\[\]/g, '')
+  cleaned = cleaned.replace(/\(\)/g, '')
+  cleaned = cleaned.replace(/!\[\]/g, '')
+  
+  // Remove excessive whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ')
+  
+  // Remove leading/trailing whitespace
+  cleaned = cleaned.trim()
+  
+  // Check if the cleaned content is too short or contains only weird characters
+  const weirdCharPattern = /^[^\w\s]*$/
+  const tooShort = cleaned.length < 10
+  const onlyWeirdChars = weirdCharPattern.test(cleaned)
+  const mostlySymbols = cleaned.replace(/[^\w\s]/g, '').length < cleaned.length * 0.3
+  
+  if (tooShort || onlyWeirdChars || mostlySymbols) {
+    return 'Content excerpt from this source - click Visit to read more'
+  }
+  
+  // Limit length and add ellipsis if needed
+  if (cleaned.length > 300) {
+    cleaned = cleaned.substring(0, 300) + '...'
+  }
+  
+  return cleaned
+}
+
 export async function generateAnswer(
   query: string,
   sources: ScrapedSource[]
@@ -148,7 +197,7 @@ Please provide a comprehensive answer to the question using these sources. Inclu
         id,
         url: source.url,
         title: source.title,
-        quote: source.quote,
+        quote: cleanQuoteContent(source.quote),
         domain,
         isAcademic,
         endpoints: source.endpoints.map(ep => ({
