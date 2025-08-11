@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server';
 import { scrapeAndChunk } from '@/lib/scrape';
 import { generateQAPairs, QAPair } from '@/lib/qa';
+import { getTemplate } from '@/lib/templates';
+import { crawlAndScrape, CrawlOptions } from '@/lib/crawler';
 
 export const maxDuration = 300; // 5 minutes
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
-  const { url } = await request.json();
+  const { url, templateId = 'general', crawlMode = false, crawlOptions } = await request.json();
   
   if (!url) {
     return new Response(JSON.stringify({ error: 'URL is required' }), {
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
   };
   
-  // Start processing in the background
+        // Start processing in the background
   (async () => {
     try {
       // Log function to write to the stream
@@ -59,15 +61,47 @@ export async function POST(request: NextRequest) {
       const updateProgress = async (value: number) => {
         await safeWrite(JSON.stringify({ type: 'progress', value }) + '\n');
       };
+
+      // Get the selected template
+      const template = getTemplate(templateId);
+      if (!template) {
+        await log(`[ERROR] Invalid template ID: ${templateId}`);
+        return;
+      }
       
-      // 1. Scrape and chunk the content
-      const chunks = await scrapeAndChunk(url, log);
+      await log(`[TEMPLATE] Using ${template.name} template for Q/A generation`);
       
-      await log(`[PROCESS] Found ${chunks.length} content chunks`);
-      await updateProgress(50); // 50% progress after scraping
+      // 1. Scrape content (single page or multi-page crawl)
+      let allChunks: Array<{ text: string; sourceUrl: string }> = [];
+      
+      if (crawlMode && crawlOptions) {
+        await log(`[CRAWLER] Starting multi-page crawl with max ${crawlOptions.maxPages} pages`);
+        
+        const crawlResults = await crawlAndScrape(url, crawlOptions as CrawlOptions, (progress, message) => {
+          log(message);
+          // Update progress for crawling phase (0-40%)
+          const crawlProgress = Math.min(40, (progress.current / progress.total) * 40);
+          updateProgress(crawlProgress);
+        });
+        
+        // Combine all chunks from all pages
+        for (const result of crawlResults) {
+          if (result.chunks.length > 0) {
+            allChunks.push(...result.chunks);
+          }
+        }
+        
+        await log(`[CRAWLER] Completed crawl: ${crawlResults.length} pages processed, ${allChunks.length} total chunks`);
+        await updateProgress(50); // 50% progress after crawling
+      } else {
+        await log(`[SCRAPE] Processing single page: ${url}`);
+        allChunks = await scrapeAndChunk(url, log);
+        await log(`[SCRAPE] Found ${allChunks.length} content chunks`);
+        await updateProgress(50); // 50% progress after scraping
+      }
       
       // Check if we have chunks to process
-      if (chunks.length === 0) {
+      if (allChunks.length === 0) {
         await log('[ERROR] No content chunks found to process');
         await updateProgress(100);
         await safeWrite(JSON.stringify({ 
@@ -78,7 +112,7 @@ export async function POST(request: NextRequest) {
       }
       
       // 2. Generate Q/A pairs
-      const progressStep = 50 / chunks.length; // Remaining 50% divided by chunks
+      const progressStep = 50 / allChunks.length; // Remaining 50% divided by chunks
       
       const qaPairsWithProgress = async (chunks: { text: string; sourceUrl: string }[]) => {
         const qaPairs: QAPair[] = [];
@@ -101,21 +135,15 @@ export async function POST(request: NextRequest) {
               messages: [
                 {
                   role: 'system',
-                  content: 'You are an expert at creating high-quality question-answer pairs for training datasets. Generate one clear, specific question and its comprehensive answer based on the provided text. Return your response in JSON format with "question" and "answer" fields.'
+                  content: template.systemPrompt
                 },
                 {
                   role: 'user',
-                  content: `Create a single question-answer pair from this text. Please respond in JSON format with the following structure:
-{
-  "question": "your question here",
-  "answer": "your answer here"
-}
-
-Text: "${text}"`
+                  content: template.userPrompt.replace('{{CONTENT}}', text)
                 }
               ],
               response_format: { type: 'json_object' },
-              temperature: 0.7,
+              temperature: template.temperature,
             });
             
             const content = response.choices[0]?.message?.content;
@@ -151,7 +179,7 @@ Text: "${text}"`
         return qaPairs;
       };
       
-      const qaPairs = await qaPairsWithProgress(chunks);
+      const qaPairs = await qaPairsWithProgress(allChunks);
       
       // Complete
       await updateProgress(100);

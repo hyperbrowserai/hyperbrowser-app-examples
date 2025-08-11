@@ -6,6 +6,7 @@ import UrlForm from '@/components/UrlForm';
 import LiveConsole from '@/components/LiveConsole';
 import Table from '@/components/Table';
 import DownloadBtn from '@/components/DownloadBtn';
+import QAEditor from '@/components/QAEditor';
 import { QAPair } from '@/lib/qa';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
@@ -17,12 +18,13 @@ export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
   const [qaPairs, setQaPairs] = useState<QAPair[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const addLog = (message: string) => {
     setLogs(prev => [...prev, message]);
   };
 
-  const handleSubmit = async (url: string) => {
+  const handleSubmit = async (url: string, templateId: string, crawlMode: boolean, crawlOptions?: any) => {
     setIsProcessing(true);
     setProgress(0);
     setLogs([]);
@@ -35,7 +37,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, templateId, crawlMode, crawlOptions }),
       });
 
       if (!response.ok) {
@@ -61,6 +63,10 @@ export default function Home() {
                 addLog(data.message);
               } else if (data.type === 'progress') {
                 setProgress(data.progress);
+              } else if (data.type === 'qaPair') {
+                // Handle individual Q/A pairs as they come in
+                setQaPairs(prev => [...prev, data.pair]);
+                setShowResults(true);
               } else if (data.type === 'result') {
                 setQaPairs(data.qaPairs);
                 setShowResults(true);
@@ -155,23 +161,69 @@ export default function Home() {
             transition={{ duration: 0.6 }}
             className="space-y-6"
           >
-            <div className="bg-white rounded-3xl card-shadow-lg overflow-hidden border">
-              <div className="p-8 border-b border-gray-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="heading-lg">Generated Dataset</h2>
-                    <p className="text-gray-600 mt-2">
-                      Successfully created {qaPairs.length} high-quality Q/A pairs ready for training
-                    </p>
-                  </div>
+            {/* Header with mode toggle */}
+            <div className="bg-white rounded-xl border p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="heading-lg">Generated Dataset</h2>
+                  <p className="text-gray-600 mt-2">
+                    Successfully created {qaPairs.length} high-quality Q/A pairs ready for training
+                  </p>
+                </div>
+                <div className="flex items-center space-x-3">
                   <div className="status-badge status-success">
                     ✓ Complete
                   </div>
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setEditMode(false)}
+                      className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        !editMode 
+                          ? 'bg-white text-gray-900 shadow-sm' 
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Quick View
+                    </button>
+                    <button
+                      onClick={() => setEditMode(true)}
+                      className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        editMode 
+                          ? 'bg-white text-gray-900 shadow-sm' 
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Edit & Review
+                    </button>
+                  </div>
                 </div>
               </div>
-              <Table data={qaPairs} isVisible={showResults} />
             </div>
-            <DownloadBtn data={qaPairs} isVisible={showResults} />
+
+            {/* Content based on mode */}
+            {editMode ? (
+              <QAEditor 
+                qaPairs={qaPairs} 
+                onQAPairsChange={setQaPairs}
+                onExport={(exportPairs) => {
+                  // Create download for selected pairs
+                  const blob = new Blob([JSON.stringify(exportPairs, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'dataset-edited.json';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              />
+            ) : (
+              <>
+                <div className="bg-white rounded-3xl card-shadow-lg overflow-hidden border">
+                  <Table data={qaPairs} isVisible={showResults} />
+                </div>
+                <DownloadBtn data={qaPairs} isVisible={showResults} />
+              </>
+            )}
           </motion.div>
         )}
       </div>
