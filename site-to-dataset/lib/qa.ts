@@ -31,7 +31,7 @@ export async function generateQAPairs(
       const chunkNumber = i + batchIndex + 1;
       try {
         const response = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
+          model: 'gpt-5-nano',
           messages: [
             {
               role: 'system',
