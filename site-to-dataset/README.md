@@ -273,4 +273,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Ready to build premium datasets?** Get your API keys at [hyperbrowser.ai](https://hyperbrowser.ai) and start transforming entire documentation sites into training data! 🎉
 
-Follow [@hyperbrowser_ai](https://x.com/hyperbrowser) for updates.
+Follow [@hyperbrowser](https://x.com/hyperbrowser) for updates.
