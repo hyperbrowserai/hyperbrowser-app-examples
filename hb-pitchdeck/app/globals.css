@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #000000;
+  --foreground: #F0FF26;
+  --accent: #00FF88;
+  --text-primary: #FFFFFF;
+  --text-secondary: #CCCCCC;
+  --card-bg: #111111;
+  --border: #333333;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--foreground);
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.btn-primary {
+  background-color: var(--foreground);
+  color: var(--background);
+}
+
+.btn-primary:hover {
+  background-color: #d9e824;
+}
+
+.btn-secondary {
+  background-color: var(--accent);
+  color: var(--background);
+}
+
+.btn-secondary:hover {
+  background-color: #00e67a;
+}
