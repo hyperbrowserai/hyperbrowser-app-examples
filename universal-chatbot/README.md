@@ -18,7 +18,7 @@ A powerful Next.js application that lets you chat with any website's latest data
 
 2. **Clone and install:**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/hyperbrowserai/hyperbrowser-app-examples
    cd universal-chatbot
    npm install
    ```
