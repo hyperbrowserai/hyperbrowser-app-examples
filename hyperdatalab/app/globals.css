@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@600&family=DM+Mono:wght@400&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --panel: #f9f9f9;
+  --muted: #f2f2f2;
+  --border: #e5e5e5;
+  --accent: #F0FF26;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --font-primary: 'Manrope', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --panel: #121212;
+    --muted: #0f0f0f;
+    --border: #2a2a2a;
+    --accent: #F0FF26;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: -0.04em;
+}

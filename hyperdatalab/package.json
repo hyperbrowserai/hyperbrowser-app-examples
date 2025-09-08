@@ -1,0 +1,41 @@
+{
+  "name": "hyperdatalab",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@hyperbrowser/sdk": "^0.59.0",
+    "archiver": "^7.0.1",
+    "canvas": "^3.2.0",
+    "framer-motion": "^12.23.12",
+    "json2csv": "^6.0.0-alpha.2",
+    "next": "15.5.2",
+    "openai": "^5.19.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-vega": "^8.0.0",
+    "uuid": "^11.1.0",
+    "vega": "^6.1.2",
+    "vega-embed": "^7.0.2",
+    "vega-lite": "^6.3.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/archiver": "^6.0.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
