@@ -611,7 +611,7 @@ function IconSliders() {
               <button className="text-sm" onClick={() => setShowCode(false)}>Close</button>
             </div>
             <div className="p-4 space-y-4">
-              <p className="text-sm opacity-80">TypeScript example using official SDK. <a href="https://github.com/" target="_blank" rel="noreferrer" className="underline">@https://github.com/</a></p>
+              <p className="text-sm opacity-80">Our official examples are available on <a href="https://github.com/hyperbrowserai/hyperbrowser-app-examples" target="_blank" rel="noreferrer" className="underline">GitHub</a></p>
               <pre className="text-xs bg-[color:var(--color-muted)] p-3 rounded overflow-auto">
 {`import { Hyperbrowser } from '@hyperbrowser/sdk';
 
