@@ -418,10 +418,10 @@ function IconSliders() {
                 placeholder="https://example.com"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                className="w-full border border-[color:var(--color-border)] rounded-lg px-3 py-2 bg-transparent focus:outline-none focus:border-[#00FF88] focus:ring-1 focus:ring-[#00FF88]"
+                className="w-full border border-[color:var(--color-border)] rounded-lg px-3 py-2 bg-transparent focus:outline-none focus:border-[#F0FF26] focus:ring-1 focus:ring-[#F0FF26]"
               />
               {!apiKey && (
-                <div className="absolute -bottom-5 left-0 text-xs text-[#00FF88]">
+                <div className="absolute   left-0 text-xs text-[#FFFFFF]">
                   Set up your API key from the settings. Get it at <a href="https://hyperbrowser.ai" target="_blank" rel="noreferrer" className="underline">hyperbrowser.ai</a>
                 </div>
               )}
@@ -535,7 +535,7 @@ function IconSliders() {
                     href="https://hyperbrowser.ai" 
                     target="_blank" 
                     rel="noreferrer" 
-                    className="text-xs text-[#00FF88] hover:underline"
+                    className="text-xs text-[#F0FF26] hover:underline"
                   >
                     Get API key from hyperbrowser.ai
                   </a>
@@ -549,7 +549,7 @@ function IconSliders() {
                     placeholder="hb_live_..."
                     spellCheck="false"
                     autoComplete="off"
-                    className="w-full border border-[color:var(--color-border)] rounded-lg px-3 py-2 pr-[4.5rem] bg-transparent font-mono text-sm focus:outline-none focus:border-[#00FF88] focus:ring-1 focus:ring-[#00FF88]"
+                    className="w-full border border-[color:var(--color-border)] rounded-lg px-3 py-2 pr-[4.5rem] bg-transparent font-mono text-sm focus:outline-none focus:border-[#F0FF26] focus:ring-1 focus:ring-[#F0FF26]"
                   />
                   <div className="absolute right-1 top-1 flex gap-1">
                     <button 
