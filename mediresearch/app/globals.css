@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #000000;
+  color: #e2e2e2;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom font utilities */
+.font-manrope-semibold {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.font-dm-mono {
+  font-family: 'DM Mono', 'Courier New', monospace;
+  text-transform: uppercase;
+}
+
+/* Utility classes for easy reuse */
+.text-heading {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.text-mono {
+  font-family: 'DM Mono', 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: -0.03em;
+
+}
