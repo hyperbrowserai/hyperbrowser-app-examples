@@ -1,14 +1,13 @@
 import { NextRequest } from 'next/server';
-import path from 'path';
-import fs from 'fs';
 import { z } from 'zod';
 import { OpenAI } from 'openai';
-import { getEnv } from '@/lib/config';
 import { createHBClient } from '@/lib/hyperbrowser';
 
 const bodySchema = z.object({
   runId: z.string().min(1),
   url: z.string().url().optional(),
+  text: z.string().optional(),
+  html: z.string().optional(),
 });
 
 type Qna = {
@@ -20,17 +19,7 @@ type Qna = {
   tags?: string[];
 };
 
-function readText(runId: string): string {
-  const textPath = path.join(process.cwd(), 'public', 'runs', runId, 'evidence', 'page.txt');
-  if (!fs.existsSync(textPath)) throw new Error('Text not found for runId');
-  return fs.readFileSync(textPath, 'utf8');
-}
-
-function readHtml(runId: string): string | null {
-  const htmlPath = path.join(process.cwd(), 'public', 'runs', runId, 'evidence', 'page.html');
-  if (!fs.existsSync(htmlPath)) return null;
-  return fs.readFileSync(htmlPath, 'utf8');
-}
+// removed file-based readers; operate on inline payload only
 
 function sanitizeToPlainText(input: string): string {
   const looksHtml = /<[^>]+>/.test(input);
@@ -106,9 +95,12 @@ function parseJsonLenient(content: string): ParsedQnaResult | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const { runId, url } = bodySchema.parse(await req.json());
-    const raw = readText(runId);
-    const text = sanitizeToPlainText(raw);
+    const { runId, url, text: bodyText, html: bodyHtml } = bodySchema.parse(await req.json());
+    const baseText = (bodyText && bodyText.trim().length > 0)
+      ? bodyText
+      : (bodyHtml ? sanitizeToPlainText(bodyHtml) : '');
+    if (!baseText) throw new Error('No text provided for QnA extraction');
+    const text = baseText;
     const chunks = splitByTokens(text);
     console.log(`[API/qna] run=${runId} textLen=${text.length} chunks=${chunks.length}`);
 
@@ -205,44 +197,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (all.length === 0) {
-      const html = readHtml(runId);
-      if (html) {
-        const plain = sanitizeToPlainText(
-          html
-            .replace(/<\/(?:header|nav|footer)[^>]*>/gi, '')
-            .replace(/<(?:script|style)[\s\S]*?<\/(?:script|style)>/gi, '')
-        );
-        const htmlChunks = splitByTokens(plain, 1800, 120);
-        for (const chunk of htmlChunks) {
-          const resp = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            temperature: 0.1,
-            response_format: { type: 'json_object' },
-            messages: [
-              { role: 'system', content: 'Extract factual QnA from the passage text only. Avoid meta/formatting questions. Output {"qna": [...]}.' },
-              { role: 'user', content: JSON.stringify({ source_url: url || '', passage: chunk }) },
-            ],
-          });
-          const content = resp.choices?.[0]?.message?.content || '';
-          try {
-            const p = parseJsonLenient(content);
-            const extra = (p?.qna || []) as Qna[];
-            for (const it of extra) {
-              all.push({
-                question: it.question || '',
-                answer: it.answer || '',
-                source_url: it.source_url || url || '',
-                passage: it.passage || chunk.slice(0, 1000),
-                confidence: Number(it.confidence ?? 0.7),
-                tags: it.tags || [],
-              });
-            }
-          } catch {}
-          if (all.length >= 5) break;
-        }
-      }
-    }
+    // html fallback path removed since we already normalized baseText above
 
     if (all.length === 0) {
       const singleSlice = text.slice(0, 18000);
@@ -278,18 +233,7 @@ export async function POST(req: NextRequest) {
       .filter(i => i.question && i.answer)
       .filter(i => !/\b(schema|json|format|source[_ ]?url)\b/i.test(i.question));
 
-    const outDir = path.join(process.cwd(), 'public', 'runs', runId, 'qna');
-    fs.mkdirSync(outDir, { recursive: true });
-    const jsonlPath = path.join(outDir, 'qna.jsonl');
-    const csvPath = path.join(outDir, 'qna.csv');
-    const metricsPath = path.join(outDir, 'metrics.json');
-
-    // write JSONL
-    fs.writeFileSync(jsonlPath, merged.map((o) => JSON.stringify(o)).join('\n'));
-    // write CSV
-    fs.writeFileSync(csvPath, toCsv(merged));
-
-    // metrics
+    // Build artifacts in-memory
     const qLens = merged.map(m => m.question.length);
     const aLens = merged.map(m => m.answer.length);
     const completeness = merged.length === 0 ? 0 : Math.round((merged.filter(m => m.answer.trim().length > 0).length / merged.length) * 100);
@@ -302,10 +246,10 @@ export async function POST(req: NextRequest) {
       completeness,
       duplicate_ratio: dupRatio,
     };
-    fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2));
-
-    const publicDir = path.join(process.cwd(), 'public');
-    const toWeb = (p: string) => '/' + path.relative(publicDir, p);
+    const csvContent = toCsv(merged);
+    const jsonlContent = merged.map((o) => JSON.stringify(o)).join('\n');
+    const csvDataUrl = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
+    const jsonlDataUrl = `data:application/x-ndjson;charset=utf-8,${encodeURIComponent(jsonlContent)}`;
 
     const columns = ['question','answer','source_url','passage','confidence'];
     const sampleRows = merged.slice(0, 100).map((m) => ({
@@ -319,9 +263,8 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({
       runId,
       files: {
-        jsonl: toWeb(jsonlPath),
-        csv: toWeb(csvPath),
-        metrics: toWeb(metricsPath),
+        jsonlDataUrl,
+        csvDataUrl,
       },
       metrics,
       columns,

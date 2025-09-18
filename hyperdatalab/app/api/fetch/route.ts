@@ -1,6 +1,4 @@
 import { NextRequest } from 'next/server';
-import path from 'path';
-import fs from 'fs';
 import { z } from 'zod';
 import { stableHash } from '@/lib/hashing';
 import { fetchWithEvidence } from '@/lib/hyperbrowser';
@@ -32,26 +30,12 @@ export async function POST(req: NextRequest) {
     const result = await fetchWithEvidence({ url, runId, apiKey });
     console.log(`[API/fetch] run=${runId} url=${url} htmlLen=${result.html.length} textLen=${result.text.length}`);
 
-    const publicDir = path.join(process.cwd(), 'public');
-    const screenshotFilePath = result.evidence.screenshotPath;
-    const hasScreenshot = fs.existsSync(screenshotFilePath);
-    const screenshotWebPath = hasScreenshot
-      ? '/' + path.relative(publicDir, screenshotFilePath)
-      : null;
-    const htmlWebPath = '/' + path.relative(publicDir, result.evidence.htmlPath);
-    const textWebPath = '/' + path.relative(publicDir, path.join(process.cwd(), 'public', 'runs', runId, 'evidence', 'page.txt'));
-
     return new Response(
       JSON.stringify({
         runId,
         html: result.html,
         text: result.text,
-        screenshotPath: screenshotWebPath,
-        evidence: {
-          htmlPath: htmlWebPath,
-          screenshotPath: screenshotWebPath,
-          textPath: textWebPath,
-        },
+        screenshotPath: null,
       }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     );
