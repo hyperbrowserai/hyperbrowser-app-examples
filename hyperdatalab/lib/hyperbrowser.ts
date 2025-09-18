@@ -1,6 +1,5 @@
 import { Hyperbrowser } from '@hyperbrowser/sdk';
 import { getEnv, HYPERBROWSER_DEFAULT_BASE_URL } from './config';
-import { ensureDir, resolveRunPath, writeFileSafe } from './fs';
 
 export type Evidence = {
   htmlPath: string;
@@ -59,21 +58,10 @@ export async function fetchWithEvidence(params: {
     const text: string = (result.data as ScrapeData)?.markdown || '';
     const screenshotBase64: string | undefined = (result.data as ScrapeData)?.screenshot;
 
-    const runDir = resolveRunPath(params.runId);
-    ensureDir(runDir);
-    const evidenceDir = resolveRunPath(params.runId, 'evidence');
-    ensureDir(evidenceDir);
-
-    const htmlPath = resolveRunPath(params.runId, 'evidence', 'page.html');
-    const screenshotPath = resolveRunPath(params.runId, 'evidence', 'screenshot.png');
-    const textPath = resolveRunPath(params.runId, 'evidence', 'page.txt');
-
-    writeFileSafe(htmlPath, html);
-    console.log(`[HB] Scrape ok run=${params.runId} htmlLen=${html.length} textLen=${text.length}`);
-    writeFileSafe(textPath, text && text.length > 0 ? text : html);
-    if (screenshotBase64) {
-      writeFileSafe(screenshotPath, Buffer.from(screenshotBase64, 'base64'));
-    }
+    const htmlPath = '';
+    const textPath = '';
+    const screenshotPath = '';
+    console.log(`[HB] Skipping evidence writes; returning inline content for run=${params.runId}`);
 
     const out = {
       html,

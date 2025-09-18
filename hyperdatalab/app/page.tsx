@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 
 type FetchResponse = {
   runId: string;
+  html: string;
+  text: string;
 };
 
 type QnaMetrics = {
@@ -19,7 +21,7 @@ type QnaMetrics = {
 
 type QnaResponse = {
   runId: string;
-  files: { jsonl: string; csv: string; metrics: string };
+  files: { jsonlDataUrl: string; csvDataUrl: string };
   metrics: QnaMetrics;
   columns: string[];
   sampleRows: Array<Record<string, string | number>>;
@@ -108,7 +110,7 @@ export default function Home() {
         throw new Error(errorMessage);
       }
       setLogs((l) => [...l, "Received response", "Building QnA"]);
-      const fetchData = { runId: json.runId } as FetchResponse;
+      const fetchData = { runId: json.runId, html: json.html || '', text: json.text || '' } as FetchResponse;
       setData(fetchData);
       // fire QnA generation
       const qnaRes = await fetch('/api/qna', {
@@ -120,7 +122,7 @@ export default function Home() {
             "Authorization": `Bearer ${apiKey}`
           } : {})
         },
-        body: JSON.stringify({ runId: fetchData.runId, url }),
+        body: JSON.stringify({ runId: fetchData.runId, url, text: fetchData.text, html: fetchData.html }),
       });
       const qnaJson = await qnaRes.json();
       if (!qnaRes.ok) {
@@ -208,9 +210,9 @@ export default function Home() {
   }, [qna]);
 
   function downloadCsv() {
-    if (!qna?.files?.csv) return;
+    if (!qna?.files?.csvDataUrl) return;
     const link = document.createElement("a");
-    link.href = qna.files.csv;
+    link.href = qna.files.csvDataUrl;
     link.download = `qna-${qna.runId}.csv`;
     link.click();
   }
