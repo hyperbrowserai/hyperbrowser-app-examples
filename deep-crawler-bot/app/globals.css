@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=DM+Mono:wght@400;500&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -83,6 +83,24 @@ a:focus-visible {
 .terminal-bg {
   background: #000000;
   border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+
+/* Typography utilities for hero */
+.font-manrope {
+  font-family: 'Manrope', Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.font-dmmono {
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.tracking-tight-2 {
+  letter-spacing: -0.02em; /* -2% letter spacing */
+}
+
+.text-hb-green {
+  color: #F0FF26;
 }
 
 

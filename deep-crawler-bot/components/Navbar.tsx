@@ -4,15 +4,12 @@ import { ExternalLink, Github, BookOpen } from 'lucide-react'
 
 export default function Navbar() {
   return (
-    <nav className="bg-black/95 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-40">
+    <nav className="bg-black/95 backdrop-blur-sm  border-gray-800 sticky top-0 z-40">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center space-x-3">
-            <img src="/hb.svg" alt="Hyperbrowser" className="w-6 h-6" />
-            <span className="text-xl font-bold text-white tracking-tight4">
-              deep<span style={{ color: '#F0FF26' }}>crawler</span>
-            </span>
+            <img src="/hb.svg" alt="Hyperbrowser" className="w-36 h-36  " />
           </div>
 
           {/* Navigation Links */}

@@ -13,11 +13,13 @@ interface ApiEndpoint {
   url: string
   status: number
   size: number
+  timestamp?: number
+  source?: 'same-origin' | 'third-party'
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { url } = await request.json()
+    const { url, sameOriginOnly = true } = await request.json()
     
     if (!url || typeof url !== 'string') {
       return new Response('URL is required', { status: 400 })
@@ -63,12 +65,14 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const sendSSE = (data: any) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+          const withTs = typeof data === 'object' && data !== null ? { ts: Date.now(), level: data.level || 'info', ...data } : data
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(withTs)}\n\n`))
         }
 
         try {
           const crawlId = uuidv4()
           const endpoints: ApiEndpoint[] = []
+          const seedHost = new URL(url).hostname
           let progress = 0
           const maxProgress = 90 // Reserve 10% for final processing
 
@@ -107,6 +111,7 @@ export async function POST(request: NextRequest) {
                 const headers = response.headers()
                 const size = parseInt(headers['content-length'] || '0', 10)
                 const contentType = headers['content-type'] || ''
+                const resourceType = request.resourceType ? request.resourceType() : ''
 
                 // Skip static assets and analytics
                 const skipPatterns = [
@@ -132,7 +137,9 @@ export async function POST(request: NextRequest) {
                   contentType.includes('text/plain') && (method === 'POST' || method === 'PUT') ||
                   
                   // XHR/Fetch requests (often APIs)
+                  (resourceType === 'xhr' || resourceType === 'fetch') ||
                   (method !== 'GET' && !isStaticAsset) ||
+                  (headers['x-requested-with'] === 'XMLHttpRequest') ||
                   
                   // Backend endpoints
                   reqUrl.match(/\/(auth|login|logout|user|users|data|config|settings)/i) ||
@@ -148,7 +155,11 @@ export async function POST(request: NextRequest) {
                 )
 
                 if (isApiEndpoint) {
-                  endpoints.push({ method, url: reqUrl, status, size })
+                  const host = (() => { try { return new URL(reqUrl).hostname } catch { return '' } })()
+                  const source: 'same-origin' | 'third-party' = host && host === seedHost ? 'same-origin' : 'third-party'
+                  if (!sameOriginOnly || source === 'same-origin') {
+                    endpoints.push({ method: method === 'HEAD' ? 'HEAD' : method, url: reqUrl, status, size, timestamp: Date.now(), source })
+                  }
                   
                   const logMessage = `${method} ${reqUrl} → ${status} (${contentType})`
                   sendSSE({ type: 'log', message: logMessage })
@@ -175,7 +186,7 @@ export async function POST(request: NextRequest) {
             
             // Wait for additional network requests to settle
             try {
-              await page.waitForTimeout(3000) // Wait 3s for additional requests
+              await new Promise(resolve => setTimeout(resolve, 3000)) // Wait 3s for additional requests
               await page.evaluate(() => new Promise(resolve => {
                 if (document.readyState === 'complete') resolve(null)
                 else window.addEventListener('load', () => resolve(null))
@@ -185,7 +196,7 @@ export async function POST(request: NextRequest) {
               sendSSE({ type: 'log', message: 'Additional wait failed, continuing with analysis' })
             }
           } catch (error) {
-            if (error.message.includes('timeout')) {
+            if (error instanceof Error && error.message.includes('timeout')) {
               sendSSE({ type: 'log', message: 'Page load timeout, continuing with partial analysis' })
             } else {
               throw error
@@ -237,7 +248,7 @@ export async function POST(request: NextRequest) {
                   // Click first few elements of each type
                   for (let i = 0; i < Math.min(3, elements.length); i++) {
                     await elements[i].click({ delay: 100 })
-                    await page.waitForTimeout(500) // Wait for potential API calls
+                    await new Promise(resolve => setTimeout(resolve, 500)) // Wait for potential API calls
                   }
                 }
               } catch (err) {
@@ -254,13 +265,13 @@ export async function POST(request: NextRequest) {
                    // Use more realistic test data that might trigger APIs
                    const testInputs = ['react', 'javascript', 'python', 'test']
                    const randomInput = testInputs[Math.floor(Math.random() * testInputs.length)]
-                   await input.type(randomInput, { delay: 50 })
-                   await page.waitForTimeout(500) // Wait longer for autocomplete/search APIs
+                  await input.type(randomInput, { delay: 50 })
+                  await new Promise(resolve => setTimeout(resolve, 500)) // Wait longer for autocomplete/search APIs
                    
                    // Try pressing Enter to trigger search
                    try {
                      await input.press('Enter')
-                     await page.waitForTimeout(1000)
+                    await new Promise(resolve => setTimeout(resolve, 1000))
                    } catch (err) {
                      // Continue if Enter press fails
                    }
@@ -270,10 +281,10 @@ export async function POST(request: NextRequest) {
                // Try triggering search specifically
                try {
                  const searchInput = await page.$('input[type="search"], input[name*="search"], input[placeholder*="search"]')
-                 if (searchInput) {
-                   await searchInput.type('react', { delay: 100 })
-                   await page.waitForTimeout(800) // Wait for autocomplete APIs
-                 }
+                if (searchInput) {
+                  await searchInput.type('react', { delay: 100 })
+                  await new Promise(resolve => setTimeout(resolve, 800)) // Wait for autocomplete APIs
+                }
                } catch (err) {
                  // Continue if search fails
                }
