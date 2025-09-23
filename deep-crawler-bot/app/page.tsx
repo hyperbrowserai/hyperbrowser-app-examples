@@ -4,6 +4,7 @@ import { useState } from 'react'
 import UrlForm from '../components/UrlForm'
 import ProgressBar from '../components/ProgressBar'
 import ResultCard from '../components/ResultCard'
+import EndpointList from '../components/EndpointList'
 import TerminalSidebar from '../components/TerminalSidebar'
 import Navbar from '../components/Navbar'
 
@@ -27,7 +28,7 @@ export default function HomePage() {
   const [logs, setLogs] = useState<string[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const handleCrawl = async (url: string) => {
+  const handleCrawl = async (url: string, options: { sameOriginOnly: boolean }) => {
     setIsLoading(true)
     setProgress(0)
     setResult(null)
@@ -38,7 +39,7 @@ export default function HomePage() {
       const response = await fetch('/api/crawl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, sameOriginOnly: options?.sameOriginOnly ?? true }),
       })
 
       if (!response.ok) {
@@ -90,24 +91,23 @@ export default function HomePage() {
     <div className="min-h-screen bg-black">
       <Navbar />
 
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
+      <main className="container mx-auto px-4 py-12 max-w-2xl">
         <div className="text-center mb-12">
-          <div className="flex items-center justify-center mb-6">
-            <h1 className="text-6xl font-bold text-white tracking-tight4">
-              Deep<span style={{ color: '#F0FF26' }}>Crawler</span>
-            </h1>
-          </div>
-          <p className="text-lg text-gray-500 tracking-tight4">
-            Unlock Hidden APIs in Seconds with <span className=' items-center'>
-              <img src="/Yellow BG.png" alt="Hyperbrowser" className="inline h-5 w-auto rounded-full" />
-            </span>
+          <img src="/logo.svg" alt="DeepCrawler logo" className="mx-auto mb-5 h-10 w-auto" />
+          <h1 className="font-manrope font-semibold tracking-tight-2 text-5xl md:text-6xl">
+            <span className="text-gray-400">Deep</span>
+            <span className="text-white">Crawler</span>
+          </h1>
+          <p className="mt-6 font-dmmono font-medium tracking-tight-2 text-xs md:text-sm text-gray-400 uppercase">
+            Unlock hidden APIs in seconds from any website
+          </p>
+          <p className="mt-3 font-dmmono tracking-tight-2 text-[10px] md:text-xs text-gray-500 uppercase">
+            An open-source project powered by Hyperbrowser.ai<br />
+            Connect your Hyperbrowser API keys to get started
           </p>
         </div>
 
-        <div className="relative rounded-2xl p-8 overflow-hidden" style={{
-          background: 'linear-gradient(135deg, rgba(240, 255, 38, 0.1) 0%, rgba(0, 0, 0, 0.8) 50%, rgba(240, 255, 38, 0.05) 100%)',
-          border: '1px solid rgba(240, 255, 38, 0.2)'
-        }}>
+        <div className="relative rounded-2xl p-6 md:p-8 overflow-hidden bg-black/40 border border-gray-700/40">
           <ProgressBar progress={progress} isLoading={isLoading} />
 
           <UrlForm onSubmit={handleCrawl} isLoading={isLoading} />
@@ -119,6 +119,7 @@ export default function HomePage() {
                 crawlId={result.crawlId}
                 postmanCollection={result.postmanCollection}
               />
+              <EndpointList endpoints={result.endpoints} />
             </div>
           )}
         </div>
