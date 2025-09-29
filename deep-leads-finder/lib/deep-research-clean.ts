@@ -145,13 +145,10 @@ export async function deepResearch(
   }
 }
 
-/**
- * Build FAST research targets optimized for Hyperbrowser batch performance
- */
+
 function buildResearchTargets(query: string, location?: string) {
   const targets = [];
   
-  // OPTIMIZED targets for speed + Hyperbrowser compatibility
   if (location) {
     targets.push({
       name: "Yelp Business",
@@ -172,7 +169,6 @@ function buildResearchTargets(query: string, location?: string) {
     });
   }
   
-  // Add Craigslist only for marketplace-type queries
   if (location && (query.includes('for sale') || query.includes('furniture') || query.includes('equipment'))) {
     targets.push({
       name: "Craigslist",

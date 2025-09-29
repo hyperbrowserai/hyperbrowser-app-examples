@@ -1,7 +1,7 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 interface Lead {
@@ -13,7 +13,7 @@ interface Lead {
 }
 
 /**
- * Filter and verify leads using OpenAI to ensure relevance
+ * Filter and verify leads using Claude to ensure relevance
  */
 export async function filterRelevantLeads(
   leads: Lead[], 
@@ -21,7 +21,7 @@ export async function filterRelevantLeads(
 ): Promise<Lead[]> {
   if (!leads.length) return [];
   
-  console.log(`🔍 OpenAI filtering ${leads.length} leads for "${query}"`);
+  console.log(`🔍 Claude filtering ${leads.length} leads for "${query}"`);
   
   try {
     const prompt = `Filter these business leads to only include ones DIRECTLY relevant to: "${query}"
@@ -37,15 +37,15 @@ INSTRUCTIONS:
 
 RELEVANT LEAD NUMBERS:`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Fast and cheap for filtering
-      messages: [{ role: "user", content: prompt }],
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929", // Claude 4.5 Sonnet (latest)
       max_tokens: 100,
       temperature: 0.1, // Low temp for consistent filtering
+      messages: [{ role: "user", content: prompt }],
     });
 
-    const relevantNumbers = response.choices[0]?.message?.content?.trim() || "";
-    console.log(`🎯 OpenAI selected: ${relevantNumbers}`);
+    const relevantNumbers = response.content[0]?.type === 'text' ? response.content[0].text.trim() : "";
+    console.log(`🎯 Claude selected: ${relevantNumbers}`);
     
     if (relevantNumbers.toLowerCase() === "none") {
       console.log(`❌ No relevant leads found for "${query}"`);
@@ -60,18 +60,18 @@ RELEVANT LEAD NUMBERS:`;
     
     const filteredLeads = selectedIndices.map(i => leads[i]);
     
-    console.log(`✅ OpenAI filtered: ${leads.length} → ${filteredLeads.length} relevant leads`);
+    console.log(`✅ Claude filtered: ${leads.length} → ${filteredLeads.length} relevant leads`);
     return filteredLeads;
     
   } catch (error) {
-    console.error(`⚠️ OpenAI filtering failed:`, error);
-    // Fallback: return original leads if OpenAI fails
+    console.error(`⚠️ Claude filtering failed:`, error);
+    // Fallback: return original leads if Claude fails
     return leads;
   }
 }
 
 /**
- * Enhance leads with better categorization using OpenAI
+ * Enhance leads with better categorization using Claude
  */
 export async function enhanceLeads(
   leads: Lead[], 
@@ -79,7 +79,7 @@ export async function enhanceLeads(
 ): Promise<Lead[]> {
   if (!leads.length) return [];
   
-  console.log(`✨ OpenAI enhancing ${leads.length} leads`);
+  console.log(`✨ Claude enhancing ${leads.length} leads`);
   
   try {
     const prompt = `Enhance these business leads with better contact info and descriptions for: "${query}"
@@ -92,21 +92,21 @@ LEAD_NUMBER: Enhanced Title | Better Description | Contact Info
 
 Be concise and focus on what makes each business relevant to "${query}".`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929", // Claude 4.5 Sonnet (latest)
       max_tokens: 500,
       temperature: 0.3,
+      messages: [{ role: "user", content: prompt }],
     });
 
-    const enhancements = response.choices[0]?.message?.content || "";
-    console.log(`✨ OpenAI enhanced leads successfully`);
+    const enhancements = response.content[0]?.type === 'text' ? response.content[0].text : "";
+    console.log(`✨ Claude enhanced leads successfully`);
     
     // For now, just return original leads (enhancement parsing can be added later)
     return leads;
     
   } catch (error) {
-    console.error(`⚠️ OpenAI enhancement failed:`, error);
+    console.error(`⚠️ Claude enhancement failed:`, error);
     return leads;
   }
 } 

@@ -36,7 +36,7 @@ export default function LiveConsole({ logs }: { logs: string[] }) {
                 <svg className="icon mr-2 mt-0.5 flex-shrink-0 w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="1"></circle>
                 </svg>
-                <span className="text-sm">{cleanLog}</span>
+                <span className="text-sm console">{cleanLog}</span>
               </motion.div>
             );
           })}

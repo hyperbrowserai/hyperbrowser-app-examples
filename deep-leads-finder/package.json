@@ -1,5 +1,5 @@
 {
-  "name": "deep-leads-finder",
+  "name": "hyperleads",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,7 +14,7 @@
     "cheerio": "^1.1.2",
     "framer-motion": "^12.23.11",
     "next": "15.4.4",
-    "openai": "^5.10.2",
+    "@anthropic-ai/sdk": "^0.27.3",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },

@@ -1,6 +1,6 @@
 **Built with [Hyperbrowser](https://hyperbrowser.ai)**
 
-# Deep Leads Finder
+# HyperLeads
 
 AI-powered lead research tool that finds relevant business contacts across multiple platforms with real-time progress tracking and precision filtering.
 
@@ -8,7 +8,7 @@ AI-powered lead research tool that finds relevant business contacts across multi
 
 - **Multi-Source Research**: Automatically searches Yelp, Google Maps, Yellow Pages, and more
 - **Live Progress**: Real-time console and progress bar for visibility into the search process
-- **AI Filtering**: OpenAI-powered relevance verification ensures only matching results
+- **AI Filtering**: Claude-powered relevance verification ensures only matching results
 - **CSV Export**: One-click export of all leads with contact information
 - **Fast Performance**: Optimized with parallel processing and session reuse
 
@@ -18,7 +18,7 @@ AI-powered lead research tool that finds relevant business contacts across multi
 - **Tailwind CSS** for minimal, clean UI
 - **Framer Motion** for smooth animations
 - **Hyperbrowser SDK** for web scraping and data extraction
-- **OpenAI API** for relevance filtering
+- **Anthropic Claude API** for relevance filtering
 
 ## Quick Start
 
@@ -26,7 +26,7 @@ AI-powered lead research tool that finds relevant business contacts across multi
 
 Get your API keys from:
 - [Hyperbrowser](https://hyperbrowser.ai)
-- [OpenAI](https://platform.openai.com)
+- [Anthropic](https://console.anthropic.com)
 
 ### 2. Environment Setup
 
@@ -34,7 +34,7 @@ Create a `.env.local` file with your API keys:
 
 ```bash
 HYPERBROWSER_API_KEY=your_hyperbrowser_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
 ### 3. Install & Run
@@ -62,9 +62,9 @@ The app will search across multiple platforms, filter for relevance, and provide
 - `app/` - Next.js app router components and API routes
 - `components/` - Reusable UI components
 - `lib/` - Core functionality including:
-  - `deep-research.ts` - Main research engine using Hyperbrowser
+  - `deep-research.ts` - Main Hyperleads research engine using Hyperbrowser
   - `session-cache.ts` - Performance optimization for browser sessions
-  - `openai-filter.ts` - AI-powered relevance filtering
+  - `claude-filter.ts` - Claude-powered relevance filtering
   - `csv.ts` - Export functionality
 
 ## Development

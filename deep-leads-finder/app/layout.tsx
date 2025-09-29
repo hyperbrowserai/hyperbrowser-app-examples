@@ -1,16 +1,27 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Manrope, DM_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 
-const inter = Inter({
-  variable: "--font-inter",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
 });
 
+const dmMono = DM_Mono({
+  variable: "--font-dm-mono",
+  subsets: ["latin"],
+  weight: ["500"], // Medium weight
+});
+
 export const metadata: Metadata = {
-  title: "Deep Leads Finder - AI-Powered Lead Research",
-  description: "Stop hunting leads manually. AI-powered deep research across Yelp, Google Maps & Yellow Pages with live progress tracking.",
+  title: "Hyperleads- AI-Powered Lead Research",
+  description: "Stop hunting leads manually. AI-powered Hyperleads research across Yelp, Google Maps & Yellow Pages with live progress tracking.",
+  icons: {
+    icon: '/Logo.svg',
+    shortcut: '/Logo.svg',
+    apple: '/Logo.svg',
+  },
 };
 
 export default function RootLayout({
@@ -19,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode; 
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${manrope.variable} ${dmMono.variable}`}>
       <body className="min-h-screen bg-background text-foreground">
         <Navbar />
         <main className="px-4 py-6 md:py-10">{children}</main>

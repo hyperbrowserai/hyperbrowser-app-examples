@@ -21,11 +21,11 @@ interface ResearchResult {
 }
 
 /**
- * Hyperleads Research API - Uses individual scraping for reliability
+ * Hyperleads Research API - Chains Hyperbrowser session, batch scrape, and batch extract
  * 
  * 1. Start persistent session
- * 2. Individual scrape target sites for research topics  
- * 3. Extract structured data from relevant pages
+ * 2. Batch scrape target sites for research topics  
+ * 3. Batch extract structured data from relevant pages
  * 4. Return clean JSON results
  */
 export async function deepResearch(
@@ -51,17 +51,22 @@ export async function deepResearch(
   }
   
   try {
-    // Step 2: Individual scraping strategy for reliability
+    // Step 2: BATCH multi-site strategy for maximum speed
     const researchTargets = buildResearchTargets(config.query, config.location);
-    console.log(`🚀 Individual targeting ${researchTargets.length} sources: ${researchTargets.map(t => t.name).join(', ')}`);
+    console.log(`🚀 BATCH targeting ${researchTargets.length} sources: ${researchTargets.map(t => t.name).join(', ')}`);
     
+    // BATCH scraping with Hyperbrowser for maximum efficiency
     const urls = researchTargets.map(target => target.url);
+    console.log(`🕷️ Starting batch scrape for ${urls.length} URLs...`);
     console.log(`📋 URLs to scrape:`, urls);
     
-    // Individual scraping approach (works on all Hyperbrowser plans)
+    // Skip batch scraping for now - use individual scraping for reliability
+    console.log(`🔄 Using individual scraping for reliability (batch scraping requires Ultra plan)`);
+    
+    // Individual scraping approach
     for (const target of researchTargets) {
       try {
-        console.log(`🔄 Scraping ${target.name}...`);
+        console.log(`🔄 Individual scraping ${target.name}...`);
         
         const scrapeResult = await hb.scrape.startAndWait({
           url: target.url,
@@ -115,7 +120,199 @@ export async function deepResearch(
       }
     }
     
-    console.log(`🏁 Research complete: ${sources.length}/${researchTargets.length} sources successful`);
+    console.log(`🏁 Individual scraping complete: ${sources.length}/${researchTargets.length} sources successful`);
+    
+    // Old batch scraping code (commented out for now)
+    /*
+    try {
+      // Use official batch scrape API
+      console.log(`🚀 Attempting batch scrape with options:`, {
+        urlCount: urls.length,
+        urls: urls,
+        timeout: 15000
+      });
+      
+      const batchScrapeResult = await hb.scrape.batch.startAndWait({
+        urls: urls,
+        scrapeOptions: { 
+          formats: ["html", "markdown"],
+          timeout: 15000 // 15s timeout for speed
+        }
+      });
+      
+      console.log(`✅ Batch scrape complete: ${batchScrapeResult.results?.length || 0} results`);
+      console.log(`📊 Batch scrape details:`, {
+        hasResults: !!batchScrapeResult.results,
+        resultCount: batchScrapeResult.results?.length || 0,
+        hasError: !!batchScrapeResult.error,
+        error: batchScrapeResult.error
+      });
+      
+      // Process batch results and extract data
+      if (batchScrapeResult.results) {
+        // Collect successful scrapes for batch extraction
+        const successfulScrapes = [];
+        
+        for (let i = 0; i < batchScrapeResult.results.length; i++) {
+          const result = batchScrapeResult.results[i];
+          const target = researchTargets[i];
+          
+          console.log(`🔍 ${target.name} result:`, {
+            hasData: !!(result.data?.html || result.data?.markdown),
+            htmlLength: result.data?.html?.length || 0,
+            markdownLength: result.data?.markdown?.length || 0,
+            hasError: !!result.error,
+            error: result.error?.message || result.error
+          });
+          
+          if (result.data?.html || result.data?.markdown) {
+            sources.push(target.name);
+            console.log(`📄 ${target.name}: Scraped successfully`);
+            successfulScrapes.push({ target, url: target.url, index: i });
+          } else {
+            console.warn(`⚠️ ${target.name}: No data scraped - ${result.error?.message || 'Unknown reason'}`);
+          }
+        }
+        
+        // Batch extract from all successful scrapes
+        if (successfulScrapes.length > 0) {
+          console.log(`🎯 Starting batch extraction for ${successfulScrapes.length} URLs...`);
+          
+          try {
+            // Use batch extraction for all URLs at once
+            console.log(`🎯 Extracting from URLs:`, successfulScrapes.map(s => s.url));
+            const batchExtractResult = await hb.extract.startAndWait({
+              urls: successfulScrapes.map(s => s.url),
+              schema: config.extractSchema || getDefaultSchema('business') // Use business schema as default
+            });
+            
+            console.log(`📊 Batch extract result:`, {
+              hasData: !!batchExtractResult.data,
+              dataType: typeof batchExtractResult.data,
+              isArray: Array.isArray(batchExtractResult.data),
+              dataKeys: batchExtractResult.data ? Object.keys(batchExtractResult.data) : []
+            });
+            
+            if (batchExtractResult.data) {
+              // Process extraction results - handle different response formats
+              if (Array.isArray(batchExtractResult.data)) {
+                // If data is an array, match each result to its URL
+                successfulScrapes.forEach((scrape, index) => {
+                  const extractData = batchExtractResult.data[index];
+                  if (extractData) {
+                    extractedData.push({
+                      source: scrape.target.name,
+                      url: scrape.url,
+                      data: extractData,
+                      timestamp: new Date().toISOString()
+                    });
+                    console.log(`✅ ${scrape.target.name}: Data extracted from array`);
+                  }
+                });
+              } else {
+                // If data is a single object, use it for all successful scrapes
+                successfulScrapes.forEach((scrape) => {
+                  extractedData.push({
+                    source: scrape.target.name,
+                    url: scrape.url,
+                    data: batchExtractResult.data,
+                    timestamp: new Date().toISOString()
+                  });
+                  console.log(`✅ ${scrape.target.name}: Data extracted from single object`);
+                });
+              }
+            }
+            
+            console.log(`🎯 Batch extraction complete: ${extractedData.length} results`);
+          } catch (extractError) {
+            console.error(`❌ Batch extraction failed, falling back to individual:`, extractError);
+            
+            // Fallback to individual extraction if batch fails
+            for (const scrape of successfulScrapes) {
+              try {
+                const extractResult = await hb.extract.startAndWait({
+                  urls: [scrape.url],
+                  schema: config.extractSchema || getDefaultSchema(scrape.target.type)
+                });
+                
+                if (extractResult.data) {
+                  extractedData.push({
+                    source: scrape.target.name,
+                    url: scrape.url,
+                    data: extractResult.data,
+                    timestamp: new Date().toISOString()
+                  });
+                  console.log(`🎯 ${scrape.target.name}: Data extracted (fallback)`);
+                }
+              } catch (individualError) {
+                console.error(`❌ ${scrape.target.name} individual extraction failed:`, individualError);
+              }
+            }
+          }
+        }
+      }
+      
+      console.log(`🏁 Batch complete: ${sources.length}/${researchTargets.length} sources successful`);
+    } catch (batchError) {
+      console.error(`❌ Batch scrape failed (might need Ultra plan), falling back to individual scraping:`, batchError);
+      
+      // Fallback to individual scraping - this should work on all plans
+      for (const target of researchTargets) {
+        try {
+          console.log(`🔄 Fallback: Individual scraping ${target.name}...`);
+          
+          const scrapeResult = await hb.scrape.startAndWait({
+            url: target.url,
+            scrapeOptions: { 
+              formats: ["html", "markdown"],
+              timeout: 15000
+            }
+          });
+          
+          console.log(`📄 ${target.name} individual scrape result:`, {
+            hasHtml: !!scrapeResult.data?.html,
+            htmlLength: scrapeResult.data?.html?.length || 0,
+            hasMarkdown: !!scrapeResult.data?.markdown,
+            markdownLength: scrapeResult.data?.markdown?.length || 0,
+            hasError: !!scrapeResult.error,
+            error: scrapeResult.error
+          });
+          
+          if (scrapeResult.data?.html || scrapeResult.data?.markdown) {
+            sources.push(target.name);
+            
+            try {
+              const extractResult = await hb.extract.startAndWait({
+                urls: [target.url],
+                schema: config.extractSchema || getDefaultSchema(target.type)
+              });
+              
+              console.log(`🎯 ${target.name} extraction result:`, {
+                hasData: !!extractResult.data,
+                dataType: typeof extractResult.data,
+                dataKeys: extractResult.data ? Object.keys(extractResult.data) : []
+              });
+              
+              if (extractResult.data) {
+                extractedData.push({
+                  source: target.name,
+                  url: target.url,
+                  data: extractResult.data,
+                  timestamp: new Date().toISOString()
+                });
+                console.log(`✅ ${target.name}: Individual scraping and extraction successful`);
+              }
+            } catch (extractError) {
+              console.error(`❌ ${target.name} extraction failed:`, extractError);
+            }
+          } else {
+            console.warn(`⚠️ ${target.name}: No data from individual scrape`);
+          }
+        } catch (individualError) {
+          console.error(`❌ ${target.name} individual scraping failed:`, individualError);
+        }
+      }
+    }
     
     return {
       query: config.query,
@@ -328,4 +525,4 @@ export async function findLeads(
       }
     }
   });
-}
+} 
