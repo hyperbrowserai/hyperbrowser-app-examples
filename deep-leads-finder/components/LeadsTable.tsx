@@ -75,7 +75,7 @@ export default function LeadsTable({ leads }: { leads: any[] }) {
                     </a>
                   </td>
                   <td className="py-3 px-4 align-top">{lead.location}</td>
-                  <td className="py-3 px-4 align-top whitespace-nowrap font-mono text-sm">{lead.price}</td>
+                  <td className="py-3 px-4 align-top whitespace-nowrap phone text-sm">{lead.price}</td>
                 </motion.tr>
               ))}
             </tbody>

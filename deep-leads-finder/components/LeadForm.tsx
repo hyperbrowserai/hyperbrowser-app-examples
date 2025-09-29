@@ -50,7 +50,7 @@ export default function LeadForm({
                 paddingLeft: '44px',
                 paddingRight: '16px'
               }}
-              placeholder="wedding photographers"
+              placeholder="Real Estate Agents"
               value={query}
               onChange={e => setQuery(e.target.value)}
               required
@@ -75,7 +75,7 @@ export default function LeadForm({
                 paddingLeft: '44px',
                 paddingRight: '16px'
               }}
-              placeholder="Austin"
+              placeholder="New York"
               value={city}
               onChange={e => setCity(e.target.value)}
               required

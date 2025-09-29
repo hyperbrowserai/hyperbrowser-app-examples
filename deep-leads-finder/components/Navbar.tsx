@@ -7,11 +7,11 @@ export default function Navbar() {
       <Link href="/" className="flex items-center space-x-3">
         <Image 
           src="/Logo.svg" 
-          alt="Deep Leads Finder Logo" 
-          width={24} 
-          height={24}
+          alt="HB" 
+          width={16} 
+          height={16}
         />
-        <h1 className="text-lg font-semibold">Deep Leads Finder</h1>
+        <h1 className="text-lg font-semibold">HyperLeads</h1>
       </Link>
       <div className="flex items-center space-x-8">
         <a 
