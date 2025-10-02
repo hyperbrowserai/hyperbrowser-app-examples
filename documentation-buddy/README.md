@@ -95,17 +95,17 @@ You can customize the crawling behavior by modifying `src/app/api/crawl/route.ts
 ```typescript
 const crawlResult = await client.crawl.startAndWait({
   url: url,
-  maxPages: maxPages, // Adjust max pages (1-200)
+  maxPages: maxPages, 
   includePatterns: [
     "/docs/*",
     "/api/*",
-    // Add more patterns
+   
   ],
   scrapeOptions: {
     formats: ["markdown"],
     onlyMainContent: true,
     excludeTags: ["nav", "footer", "aside"],
-    waitFor: 2000, // Wait time for JS rendering
+    waitFor: 2000, 
   },
 });
 ```
@@ -116,9 +116,9 @@ Customize the AI behavior in `src/app/api/chat/route.ts`:
 
 ```typescript
 const result = streamText({
-  model: openai('gpt-4o-mini'), // Change model
-  temperature: 0.7, // Adjust creativity
-  maxTokens: 1000, // Response length
+  model: openai('gpt-4o-mini'), 
+  temperature: 0.7, 
+  maxTokens: 1000, 
 });
 ```
 

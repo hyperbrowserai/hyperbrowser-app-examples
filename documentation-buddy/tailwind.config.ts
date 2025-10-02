@@ -11,10 +11,14 @@ export default {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        accent: "#F0FF26",
       },
       fontFamily: {
-        sans: ["var(--font-hubot-sans)", "ui-sans-serif", "system-ui"],
-        mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+        sans: ["var(--font-manrope)", "ui-sans-serif", "system-ui"],
+        mono: ["var(--font-dm-mono)", "ui-monospace", "monospace"],
+      },
+      letterSpacing: {
+        tight02: "-0.02em",
       },
     },
   },

@@ -39,7 +39,7 @@ export function MessageRenderer({ content, role }: MessageRendererProps) {
             
             return (
               <code 
-                className="px-1.5 py-0.5 bg-black/30 text-green-300 rounded text-sm font-mono border border-green-500/30" 
+                className="px-1.5 py-0.5 bg-black/30 text-[#F0FF26] rounded text-sm font-mono border border-[#F0FF26]/30" 
                 {...rest}
               >
                 {children}
@@ -72,7 +72,7 @@ export function MessageRenderer({ content, role }: MessageRendererProps) {
           },
           blockquote({ children }) {
             return (
-              <blockquote className="border-l-4 border-green-400 pl-3 py-1 bg-green-400/10 my-2 text-white">
+              <blockquote className="border-l-4 border-[#F0FF26] pl-3 py-1 bg-[#F0FF26]/10 my-2 text-white">
                 {children}
               </blockquote>
             );
@@ -83,7 +83,7 @@ export function MessageRenderer({ content, role }: MessageRendererProps) {
                 href={href} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-green-300 hover:text-green-200 underline transition-colors"
+                className="text-[#F0FF26] hover:text-[#e0ef00] underline transition-colors"
               >
                 {children}
               </a>
@@ -117,11 +117,11 @@ function CodeBlock({ language, code }: CodeBlockProps) {
 
   return (
     <div className="relative group my-4">
-      <div className="flex items-center justify-between bg-gray-900 text-gray-200 px-4 py-2 text-sm rounded-t-lg border border-green-500/30">
-        <span className="font-medium text-green-300">{language || 'Code'}</span>
+      <div className="flex items-center justify-between bg-gray-900 text-gray-200 px-4 py-2 text-sm rounded-t-lg border border-[#F0FF26]/30">
+        <span className="font-medium text-[#F0FF26]">{language || 'Code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center space-x-1 text-gray-300 hover:text-green-300 transition-colors opacity-0 group-hover:opacity-100"
+          className="flex items-center space-x-1 text-gray-300 hover:text-[#F0FF26] transition-colors opacity-0 group-hover:opacity-100"
         >
           {copied ? (
             <>
@@ -136,7 +136,7 @@ function CodeBlock({ language, code }: CodeBlockProps) {
           )}
         </button>
       </div>
-      <div className="rounded-b-lg overflow-hidden border-x border-b border-green-500/30">
+      <div className="rounded-b-lg overflow-hidden border-x border-b border-[#F0FF26]/30">
         <SyntaxHighlighter
           style={oneDark}
           language={language || 'text'}
