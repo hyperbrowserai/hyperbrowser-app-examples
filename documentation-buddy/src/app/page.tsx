@@ -5,7 +5,6 @@ import { DocumentationProvider, useDocumentation } from '@/contexts/Documentatio
 import { UrlInput } from '@/components/UrlInput';
 import { ChatInterface } from '@/components/ChatInterface';
 import { LoadingState } from '@/components/LoadingState';
-import BgGradient from '@/components/BgGradient';
 import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
 
@@ -15,9 +14,8 @@ function DocumentationBuddyContent() {
 
   return (
     <div className="min-h-screen relative">
-      <BgGradient />
+
       
-      {/* Navbar */}
       <Navbar 
         apiKey={apiKey}
         onOpenSidebar={() => setShowSidebar(true)}

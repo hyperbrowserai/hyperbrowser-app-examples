@@ -94,8 +94,8 @@ Always format your responses using proper markdown, including code blocks with l
         role: msg.role,
         content: msg.content,
       })),
-      temperature: 0.3, // Lower temperature for more focused answers
-      maxTokens: 1200, // Slightly more tokens for comprehensive answers
+      temperature: 0.3, 
+      maxTokens: 1200, 
     });
 
     return result.toDataStreamResponse();
