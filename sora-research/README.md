@@ -2,7 +2,7 @@
 
 **Built with [Hyperbrowser](https://hyperbrowser.ai)**
 
-Upload an AI-generated video to discover similar content across the web and infer the text prompt that created it. Powered by Hyperbrowser visual search, AI gallery scraping, and GPT-4o prompt analysis.
+Upload an AI-generated video to analyze its audio and infer the text prompt that created it. Powered by Hyperbrowser scraping and GPT-4o prompt analysis.
 
 ## Table of Contents
 
@@ -24,19 +24,18 @@ Upload an AI-generated video to discover similar content across the web and infe
 
 - **Audio Detection & Transcription**: Automatically extract and transcribe audio using OpenAI Whisper
 - **Audio-Enhanced Prompts**: Refine prompt inference by incorporating speech and audio context
-- **Find Similar Videos**: Discover visually similar AI-generated content using Google Lens reverse image search
-- **AI Gallery Search**: Search across Runway, Pika, and Civitai video galleries for related content
-- **Community Discovery**: Find discussions on Reddit about similar AI videos
 - **Prompt Decoding**: Analyze keyframes to infer the generation prompt with confidence scores
-- **Keyframe Extraction**: Automatically extract representative frames from uploaded videos
-- **Stateless Storage**: File-based runs stored under `/public/runs/<uuid>/`
+- **Keyframe Extraction**: Extract representative frames (1 fps, min 3, up to 24)
+- **Pricing Estimation**: Scrape platform pricing pages (OpenAI Sora, Runway, Pika) and estimate cost
+- **Minimal Waveform**: Render a lightweight audio waveform visualization in the UI
+- **Stateless Storage (local)**: File-based runs stored under `/public/runs/<uuid>/` on your machine
 
 ## Tech Stack
 
 - Next.js 15 App Router
 - TypeScript (strict mode)
 - Tailwind CSS
-- Hyperbrowser API (Sessions, Extract, Scrape)
+- Hyperbrowser API (Scrape)
 - OpenAI GPT-4o & Whisper
 - FFmpeg
 
@@ -162,10 +161,7 @@ Test that everything works:
    - Transcribe spoken dialogue
    - Detect music/sound effects
    - Analyze audio context
-3. **Find Similar Videos** - Uses Hyperbrowser to search:
-   - Google Lens reverse image search for visual matches
-   - AI video galleries (Runway, Pika, Civitai)
-   - Reddit AI communities for discussions
+3. **Estimate Pricing** - Uses Hyperbrowser to scrape pricing pages and estimate cost
 4. **Decode Prompt** - Analyzes frames with GPT-4o to infer generation prompt
    - Automatically incorporates audio context if available
    - Refines prompt based on dialogue/music
@@ -173,7 +169,7 @@ Test that everything works:
 
 ### File Structure
 
-All runs are stored stateless in `/public/runs/<run_id>/`:
+All runs are stored locally in `/public/runs/<run_id>/`:
 
 ```
 /public/runs/<run_id>/
@@ -184,8 +180,7 @@ All runs are stored stateless in `/public/runs/<run_id>/`:
   ├── frame_003.jpg       # Keyframe 3
   ├── frame_004.jpg       # Keyframe 4
   ├── frame_005.jpg       # Keyframe 5
-  ├── data.json           # Complete run data (includes audio transcription)
-  └── results.json        # Search results
+  └── data.json           # Run data (includes audio transcription and pricing results)
 ```
 
 ## API Endpoints
@@ -205,19 +200,16 @@ const { run_id, frames } = await res.json();
 ```
 
 ### POST /api/search
-Find similar videos using Hyperbrowser
+Get platform pricing estimates using Hyperbrowser
 
 ```typescript
 const res = await fetch('/api/search', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ 
-    run_id, 
-    frame_url: 'http://localhost:3000/runs/abc/frame_001.jpg'
-  }),
+  body: JSON.stringify({ run_id }),
 });
-const { results } = await res.json();
-// Returns: { run_id: string, results: SearchResult[] }
+const { pricing, cheapest } = await res.json();
+// Returns: { run_id: string, pricing: PricingResult[], cheapest: PricingResult }
 ```
 
 ### POST /api/transcribe
@@ -264,56 +256,15 @@ const { summary } = await res.json();
 
 ## Hyperbrowser Integration
 
-This app uses **official Hyperbrowser APIs**:
-
-### Sessions API
-```typescript
-// Start cloud browser session
-const session = await hyperbrowser.startSession();
-await hyperbrowser.navigate(session.sessionId, url);
-const screenshot = await hyperbrowser.screenshot(session.sessionId);
-await hyperbrowser.closeSession(session.sessionId);
-```
-
-### Extract API
-```typescript
-// Extract structured data with schema
-const schema = {
-  videos: [{
-    title: 'string',
-    author: 'string',
-    url: 'string',
-  }],
-};
-const data = await hyperbrowser.extract(url, schema);
-```
-
-### Scrape API
-```typescript
-// Scrape page content
-const result = await hyperbrowser.scrape(url);
-// Returns: { content: string, title: string, url: string }
-```
+This app uses the **Scrape API** via the official SDK to scrape pricing pages with simple retry/timeout logic.
 
 ## How It Works
 
-### 1. Find Similar Videos
+### 1. Pricing Scrape
 
-**Google Lens Search:**
-- Takes first keyframe from uploaded video
-- Uses Google Lens reverse image search
-- Extracts visually similar results
-
-**AI Gallery Search:**
-- Scrapes Runway showcase page
-- Scrapes Pika community gallery
-- Scrapes Civitai video section
-- Extracts video metadata (title, author, thumbnail)
-
-**Reddit Community Search:**
-- Searches r/singularity and r/StableDiffusion
-- Finds top posts about AI video generation
-- Extracts discussion metadata
+- Scrapes Sora / Runway / Pika pricing pages
+- Extracts pricing model and rough cost per second
+- Estimates total cost based on video duration and complexity
 
 ### 2. Audio Transcription (New!)
 
@@ -328,10 +279,10 @@ const result = await hyperbrowser.scrape(url);
 
 ### 3. Prompt Decoder
 
-- Sends 3 keyframes to GPT-4o
+- Sends keyframes to GPT-4o
 - Automatically includes audio context if available
 - Incorporates dialogue/narration into prompt analysis
-- Uses low temperature (0.2) for consistency
+- Uses temperature 0.3 for consistency
 - Returns: prompt, style tags, confidence score, audio context
 - Optimized for minimal token usage
 
@@ -488,11 +439,10 @@ OPENAI_API_KEY=sk-xxxxxxxxxxxxx
 ## Performance
 
 - **Video upload**: 50MB limit
-- **Keyframes**: 5 per video (optimal for LLM analysis)
-- **Hyperbrowser**: Retry logic with exponential backoff (3 attempts)
-- **GPT-4o**: 500 max tokens per request
-- **Temperature**: 0.2 (consistent results)
-- **Results**: Top 10 similar videos returned
+- **Keyframes**: 1 fps, minimum 3 frames, up to 24 frames
+- **Hyperbrowser**: Simple retries (up to 3) with timeout
+- **GPT-4o**: Up to 800 tokens per request
+- **Temperature**: 0.3
 - **Storage**: File-based, no database overhead
 
 ### Optimization Tips
