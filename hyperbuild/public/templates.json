@@ -1,0 +1,111 @@
+[
+  {
+    "id": "web-data-enricher",
+    "name": "Web Data Enricher",
+    "description": "Scrape and clean web content",
+    "nodes": [
+      { "id": "s1", "type": "Start", "data": { "input": "" } },
+      { "id": "n1", "type": "Scrape", "data": { "url": "https://news.ycombinator.com" } },
+      { "id": "n2", "type": "Transform", "data": {} },
+      { "id": "n3", "type": "LLM", "data": { "instruction": "Transform the scraped content into a clean, structured JSON array. Extract and organize: title, description, url, date (if available), category/tags. Requirements: 1) Remove all HTML tags and formatting artifacts, 2) Standardize field names (camelCase), 3) Validate URLs are complete, 4) Handle missing data gracefully with null values, 5) Ensure consistent data types. Output ONLY valid JSON array." } },
+      { "id": "n4", "type": "Output", "data": {} }
+    ],
+    "edges": [
+      { "id": "es1", "source": "s1", "target": "n1" },
+      { "id": "e1", "source": "n1", "target": "n2" },
+      { "id": "e2", "source": "n2", "target": "n3" },
+      { "id": "e3", "source": "n3", "target": "n4" }
+    ]
+  },
+  {
+    "id": "market-trend-planner",
+    "name": "Market Trend Planner",
+    "description": "Analyze tech trends from news with AI",
+    "nodes": [
+      { "id": "s1", "type": "Start", "data": { "input": "" } },
+      { "id": "n1", "type": "Scrape", "data": { "url": "https://news.ycombinator.com" } },
+      { "id": "n2", "type": "Transform", "data": {} },
+      { "id": "n3", "type": "LLM", "data": { "instruction": "Analyze the tech news content and extract the top 5 emerging technology trends. For each trend, create a JSON object with: trendName (string), description (2-3 sentences), marketImpact (High/Medium/Low), adoptionTimeline (string), keyPlayers (array of company names), confidenceScore (1-10), sources (array of relevant article titles). Prioritize trends with multiple mentions and recent developments. Output as valid JSON array only." } },
+      { "id": "n4", "type": "Output", "data": {} }
+    ],
+    "edges": [
+      { "id": "es1", "source": "s1", "target": "n1" },
+      { "id": "e1", "source": "n1", "target": "n2" },
+      { "id": "e2", "source": "n2", "target": "n3" },
+      { "id": "e3", "source": "n3", "target": "n4" }
+    ]
+  },
+  {
+    "id": "dynamic-faq-agent",
+    "name": "Dynamic FAQ Agent",
+    "description": "Generate Q&A from web content",
+    "nodes": [
+      { "id": "s1", "type": "Start", "data": { "input": "" } },
+      { "id": "n1", "type": "Scrape", "data": { "url": "https://docs.hyperbrowser.ai" } },
+      { "id": "n2", "type": "QnAGenerator", "data": {} },
+      { "id": "n3", "type": "Output", "data": {} }
+    ],
+    "edges": [
+      { "id": "es1", "source": "s1", "target": "n1" },
+      { "id": "e1", "source": "n1", "target": "n2" },
+      { "id": "e2", "source": "n2", "target": "n3" }
+    ]
+  },
+  {
+    "id": "web-dataset-qa",
+    "name": "Web Dataset Q/A",
+    "description": "Create Q&A dataset from any website",
+    "nodes": [
+      { "id": "s1", "type": "Start", "data": { "input": "" } },
+      { "id": "n1", "type": "Scrape", "data": { "url": "https://openai.com/api/" } },
+      { "id": "n2", "type": "QnAGenerator", "data": {} },
+      { "id": "n3", "type": "Output", "data": {} }
+    ],
+    "edges": [
+      { "id": "es1", "source": "s1", "target": "n1" },
+      { "id": "e1", "source": "n1", "target": "n2" },
+      { "id": "e2", "source": "n2", "target": "n3" }
+    ]
+  },
+  {
+    "id": "web-version-comparator",
+    "name": "Web Version Comparator",
+    "description": "Compare data from multiple sources",
+    "nodes": [
+      { "id": "s1", "type": "Start", "data": { "input": "" } },
+      { "id": "a1", "type": "Scrape", "data": { "url": "https://vercel.com/changelog" } },
+      { "id": "a2", "type": "Scrape", "data": { "url": "https://netlify.com/changelog" } },
+      { "id": "a3", "type": "Transform", "data": {} },
+      { "id": "a4", "type": "LLM", "data": { "instruction": "Create a comprehensive comparison analysis of both platform changelogs. Structure as JSON with: summary (overall comparison), recentFeatures (last 30 days for each platform), performanceUpdates (speed/reliability improvements), developerExperience (DX enhancements), pricingChanges (any plan/cost updates), competitiveAdvantages (unique strengths of each), recommendations (which platform for what use case). Include release dates and impact assessment for each item." } },
+      { "id": "a5", "type": "Output", "data": {} }
+    ],
+    "edges": [
+      { "id": "es1", "source": "s1", "target": "a1" },
+      { "id": "es2", "source": "s1", "target": "a2" },
+      { "id": "e1", "source": "a1", "target": "a3" },
+      { "id": "e2", "source": "a2", "target": "a3" },
+      { "id": "e3", "source": "a3", "target": "a4" },
+      { "id": "e4", "source": "a4", "target": "a5" }
+    ]
+  },
+  {
+    "id": "web-knowledge-monitor",
+    "name": "Web Knowledge Monitor",
+    "description": "Monitor and track website changes",
+    "nodes": [
+      { "id": "s1", "type": "Start", "data": { "input": "" } },
+      { "id": "n1", "type": "Scrape", "data": { "url": "https://openai.com/index" } },
+      { "id": "n2", "type": "Transform", "data": {} },
+      { "id": "n3", "type": "LLM", "data": { "instruction": "Extract and structure website content for change monitoring. Create JSON with: snapshot (current timestamp), announcements (array of news/updates with dates), productUpdates (new features/changes), pricingInfo (current plans/costs), upcomingEvents (dates and descriptions), contactDetails (support/sales info), policies (terms/privacy updates), metadata (page title, last modified). Focus on factual, trackable information that would indicate meaningful changes between visits." } },
+      { "id": "n4", "type": "Output", "data": {} }
+    ],
+    "edges": [
+      { "id": "es1", "source": "s1", "target": "n1" },
+      { "id": "e1", "source": "n1", "target": "n2" },
+      { "id": "e2", "source": "n2", "target": "n3" },
+      { "id": "e3", "source": "n3", "target": "n4" }
+    ]
+  }
+]
+
+

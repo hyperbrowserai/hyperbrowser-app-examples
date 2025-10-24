@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-dm-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: var(--font-dm-mono), monospace;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+/* Hide React Flow attribution watermark */
+.react-flow__panel.react-flow__attribution {
+  display: none !important;
+}
+
+/* Fix ReactFlow control icons to be white */
+.react-flow__controls button svg {
+  fill: white !important;
+  stroke: white !important;
+  color: white !important;
+}
+
+.react-flow__controls button svg path {
+  fill: white !important;
+  stroke: white !important;
+}
+
+.react-flow__controls button svg * {
+  fill: white !important;
+  stroke: white !important;
+  color: white !important;
+}
+
+.react-flow__controls button {
+  background: rgba(38, 38, 38, 0.8) !important;
+  border: 1px solid rgba(115, 115, 115, 0.5) !important;
+  color: white !important;
+}
+
+.react-flow__controls button:hover {
+  background: rgba(64, 64, 64, 0.9) !important;
+}
+
+/* Specifically target the close/cross icon */
+.react-flow__controls .react-flow__controls-button svg {
+  fill: white !important;
+  stroke: white !important;
+}
