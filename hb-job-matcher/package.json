@@ -13,12 +13,12 @@
     "@hyperbrowser/sdk": "^0.49.1",
     "@langchain/openai": "^0.5.12",
     "dotenv": "^16.5.0",
-    "next": "15.3.3",
+    "next": "15.3.6",
     "openai": "^5.1.1",
     "pdf-parse": "^1.1.1",
     "puppeteer-core": "^24.10.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^19.1.2",
+    "react-dom": "^19.1.2",
     "ts-node": "^10.9.2"
   },
   "devDependencies": {
