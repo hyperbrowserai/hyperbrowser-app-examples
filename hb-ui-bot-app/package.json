@@ -11,10 +11,10 @@
   "dependencies": {
     "@hyperbrowser/sdk": "^0.56.0",
     "dotenv": "^17.2.1",
-    "next": "15.4.5",
+    "next": "15.4.8",
     "openai": "^5.11.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react": "19.1.2",
+    "react-dom": "19.1.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

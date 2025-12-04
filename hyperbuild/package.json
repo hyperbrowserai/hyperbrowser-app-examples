@@ -12,10 +12,10 @@
   "dependencies": {
     "@hyperbrowser/sdk": "^0.65.0",
     "@xyflow/react": "12.8.6",
-    "next": "15.5.4",
+    "next": "15.5.7",
     "openai": "^6.3.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react": "19.1.2",
+    "react-dom": "19.1.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -24,7 +24,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.4",
+    "eslint-config-next": "15.5.7",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

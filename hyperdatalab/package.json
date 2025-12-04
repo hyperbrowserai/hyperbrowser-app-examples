@@ -14,10 +14,10 @@
     "canvas": "^3.2.0",
     "framer-motion": "^12.23.12",
     "json2csv": "^6.0.0-alpha.2",
-    "next": "15.5.2",
+    "next": "15.5.7",
     "openai": "^5.19.1",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "19.1.2",
+    "react-dom": "19.1.2",
     "react-vega": "^8.0.0",
     "uuid": "^11.1.0",
     "vega": "^6.1.2",
@@ -34,7 +34,7 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "eslint-config-next": "15.5.7",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

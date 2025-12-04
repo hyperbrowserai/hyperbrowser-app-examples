@@ -12,11 +12,11 @@
     "@hyperbrowser/sdk": "^0.55.0",
     "framer-motion": "^11.3.8",
     "lucide-react": "^0.417.0",
-    "next": "15.4.3",
+    "next": "15.4.8",
     "openai": "^4.62.1",
     "pdf-parse-new": "^1.4.1",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react": "19.1.2",
+    "react-dom": "19.1.2"
   },
   "devDependencies": {
     "@types/node": "^20",
