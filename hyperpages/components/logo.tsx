@@ -1,0 +1,12 @@
+export default function Logo() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <svg width="20" height="32" viewBox="0 0 104 167" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M76.4409 0.958618L0.27832 83.6963H41.5624C47.8498 83.6963 53.3845 79.5487 55.1561 73.5091L76.4409 0.958618Z" fill="#1D1D1D"/>
+        <path d="M48.9596 93.881L27.6748 166.434L103.837 83.6959H62.5532C56.2659 83.6959 50.7312 87.8436 48.9596 93.8831V93.881Z" fill="#1D1D1D"/>
+      </svg>
+      <span className="text-lg font-semibold text-foreground">HyperPages</span>
+    </div>
+  );
+}
+
