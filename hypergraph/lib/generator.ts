@@ -1,7 +1,7 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import type { GraphNode, SkillGraph, GeneratedFile } from "@/types/graph";
 
-const openai = new OpenAI();
+const anthropic = new Anthropic();
 
 const SYSTEM_PROMPT = `You are a domain knowledge graph architect. Given a topic and source material, produce a deeply interconnected JSON skill graph that enables an agent to UNDERSTAND the domain — not merely summarize it. This is the difference between an agent that follows instructions and an agent that understands a domain.
 
@@ -61,22 +61,22 @@ export async function generateGraph(
     .map((d) => `## Source: ${d.url}\n\n${d.markdown.slice(0, 4000)}`)
     .join("\n\n---\n\n");
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    response_format: { type: "json_object" },
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 8192,
+    temperature: 0.7,
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Topic: ${topic}\n\nScraped documentation:\n\n${truncatedDocs}`,
+        content: `Topic: ${topic}\n\nScraped documentation:\n\n${truncatedDocs}\n\nRespond with ONLY the JSON object, no other text.`,
       },
     ],
-    temperature: 0.7,
-    max_tokens: 8192,
   });
 
-  const raw = response.choices[0].message.content;
-  if (!raw) throw new Error("Empty response from OpenAI");
+  const raw =
+    response.content[0].type === "text" ? response.content[0].text : null;
+  if (!raw) throw new Error("Empty response from Claude");
 
   const parsed = JSON.parse(raw) as SkillGraph;
 

@@ -9,10 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@hyperbrowser/sdk": "^0.83.3",
     "jszip": "^3.10.1",
     "next": "16.1.6",
-    "openai": "^6.22.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-force-graph-2d": "^1.29.1",
