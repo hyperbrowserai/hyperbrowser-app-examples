@@ -1,0 +1,99 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Task {
+  id           String           @id @default(cuid())
+  title        String
+  goal         String
+  status       String           @default("queued")
+  model        String           @default("auto")
+  scheduleCron String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  runs         Run[]
+  attachments  TaskAttachment[]
+  memories     Memory[]
+}
+
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  filename  String
+  mimeType  String
+  sizeBytes Int
+  text      String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id])
+}
+
+model Run {
+  id         String     @id @default(cuid())
+  taskId     String
+  goal       String?
+  status     String     @default("queued")
+  model      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  error      String?
+  output     String?
+  task       Task       @relation(fields: [taskId], references: [id])
+  steps      Step[]
+  sources    Source[]
+  subagents  Subagent[]
+  memories   Memory[]
+}
+
+model Subagent {
+  id         String    @id @default(cuid())
+  runId      String
+  task       String
+  model      String
+  status     String    @default("running")
+  output     String?
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  run        Run       @relation(fields: [runId], references: [id])
+}
+
+model Step {
+  id         String    @id @default(cuid())
+  runId      String
+  type       String
+  status     String    @default("queued")
+  inputJson  String?
+  outputJson String?
+  error      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  run        Run       @relation(fields: [runId], references: [id])
+}
+
+model Source {
+  id               String   @id @default(cuid())
+  runId            String
+  url              String
+  title            String?
+  snippet          String?
+  rawMarkdown      String?
+  screenshotBase64 String?
+  retrievedAt      DateTime @default(now())
+  run              Run      @relation(fields: [runId], references: [id])
+}
+
+model Memory {
+  id        String   @id @default(cuid())
+  taskId    String
+  runId     String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id])
+  run       Run      @relation(fields: [runId], references: [id])
+}
