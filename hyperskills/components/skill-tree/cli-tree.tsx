@@ -1,0 +1,128 @@
+"use client";
+
+import { SkillTreeFile } from "@/types";
+import { useMemo } from "react";
+
+interface CLITreeProps {
+  topic: string;
+  files: SkillTreeFile[];
+}
+
+interface TreeNode {
+  name: string;
+  path?: string;
+  links: string[];
+  children: Map<string, TreeNode>;
+}
+
+function extractLinks(content: string): string[] {
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatterMatch) return [];
+
+  const linksMatch = frontmatterMatch[1].match(
+    /links:\s*\[([^\]]*)\]/
+  );
+  if (!linksMatch) return [];
+
+  return linksMatch[1]
+    .split(",")
+    .map((l) => l.trim().replace(/['"]/g, ""))
+    .filter(Boolean);
+}
+
+function countAllLinks(files: SkillTreeFile[]): number {
+  return files.reduce((sum, f) => sum + extractLinks(f.content).length, 0);
+}
+
+function buildTree(files: SkillTreeFile[]): TreeNode {
+  const root: TreeNode = { name: "", links: [], children: new Map() };
+
+  for (const file of files) {
+    const parts = file.path.split("/");
+    let current = root;
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (!current.children.has(part)) {
+        current.children.set(part, {
+          name: part,
+          path: i === parts.length - 1 ? file.path : undefined,
+          links: i === parts.length - 1 ? extractLinks(file.content) : [],
+          children: new Map(),
+        });
+      }
+      current = current.children.get(part)!;
+    }
+  }
+
+  return root;
+}
+
+function renderNode(
+  node: TreeNode,
+  prefix: string,
+  isLast: boolean,
+  isRoot: boolean
+): string[] {
+  const lines: string[] = [];
+  const connector = isRoot ? "" : isLast ? "└── " : "├── ";
+  const childPrefix = isRoot ? "" : prefix + (isLast ? "    " : "│   ");
+
+  if (!isRoot) {
+    const isFolder = node.children.size > 0 && !node.path;
+    let line = prefix + connector;
+
+    if (isFolder) {
+      line += `${node.name}/`;
+    } else {
+      line += node.name;
+      if (node.links.length > 0) {
+        line += ` ──→ [${node.links.join(", ")}]`;
+      }
+      if (node.name === "index.md") {
+        line += " (entry point)";
+      }
+    }
+
+    lines.push(line);
+  }
+
+  const children = Array.from(node.children.values());
+  const folders = children.filter((c) => c.children.size > 0 && !c.path);
+  const fileNodes = children.filter((c) => c.path || c.children.size === 0);
+  const sorted = [...folders, ...fileNodes];
+
+  sorted.forEach((child, i) => {
+    const last = i === sorted.length - 1;
+    lines.push(...renderNode(child, childPrefix, last, false));
+  });
+
+  return lines;
+}
+
+export default function CLITree({ topic, files }: CLITreeProps) {
+  const treeText = useMemo(() => {
+    const totalLinks = countAllLinks(files);
+    const tree = buildTree(files);
+    const lines = renderNode(tree, "", true, true);
+
+    const header = `⚡ ${topic} (${files.length} nodes, ${totalLinks} links)`;
+    return [header, "│", ...lines].join("\n");
+  }, [topic, files]);
+
+  return (
+    <div className="w-full border-4 border-black shadow-brutal bg-black text-white font-mono text-sm overflow-x-auto">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800">
+        <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+        <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+        <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+        <span className="ml-3 text-gray-500 text-xs uppercase tracking-wider">
+          skill-tree / {topic}
+        </span>
+      </div>
+      <pre className="p-6 leading-relaxed whitespace-pre overflow-x-auto">
+        {treeText}
+      </pre>
+    </div>
+  );
+}
