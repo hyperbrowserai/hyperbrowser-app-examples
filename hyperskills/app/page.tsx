@@ -6,18 +6,22 @@ import InputSection from "@/components/input-section";
 import BatchInputSection from "@/components/batch-input-section";
 import BatchResultsSection from "@/components/batch-results-section";
 import PreviewSection from "@/components/preview-section";
-import { GenerateResponse, BatchResult } from "@/types";
-import { Key, Zap, List } from "lucide-react";
+import SkillTreeOutput from "@/components/skill-tree/skill-tree-output";
+import { GenerateResponse, BatchResult, SkillTreeResult } from "@/types";
+import { Key, Zap, List, GitBranch } from "lucide-react";
 
-type Mode = "single" | "batch";
+type Mode = "single" | "batch" | "tree";
 
 export default function Home() {
   const [mode, setMode] = useState<Mode>("single");
   const [topic, setTopic] = useState("");
+  const [treeTopic, setTreeTopic] = useState("");
   const [batchUrls, setBatchUrls] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
+  const [skillTreeResult, setSkillTreeResult] = useState<SkillTreeResult | null>(null);
   const [error, setError] = useState("");
 
   const handleGenerate = async () => {
@@ -133,11 +137,57 @@ export default function Home() {
     }, 100);
   };
 
+  const handleTreeGenerate = async () => {
+    if (!treeTopic.trim()) return;
+
+    setLoading(true);
+    setError("");
+    setSkillTreeResult(null);
+    setLoadingStage("Searching documentation...");
+
+    try {
+      const isUrl =
+        treeTopic.startsWith("http://") || treeTopic.startsWith("https://");
+
+      setLoadingStage(
+        isUrl ? "Scraping source..." : "Searching documentation..."
+      );
+
+      const response = await fetch("/api/skill-tree", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [isUrl ? "url" : "topic"]: treeTopic,
+        }),
+      });
+
+      setLoadingStage("Building skill tree...");
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate skill tree");
+      }
+
+      setSkillTreeResult(data.tree);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "An unknown error occurred";
+      setError(errorMessage);
+      console.error("Error generating skill tree:", err);
+    } finally {
+      setLoading(false);
+      setLoadingStage("");
+    }
+  };
+
   const handleModeSwitch = (newMode: Mode) => {
     setMode(newMode);
     setError("");
     setGeneratedContent("");
     setBatchResults([]);
+    setSkillTreeResult(null);
+    setLoadingStage("");
   };
 
   return (
@@ -207,6 +257,18 @@ export default function Home() {
               <List size={18} strokeWidth={2.5} />
               Batch Mode
             </button>
+            <div className="w-[4px] bg-black" />
+            <button
+              onClick={() => handleModeSwitch("tree")}
+              className={`px-8 py-4 font-bold text-sm uppercase tracking-wider flex items-center gap-2 transition-all ${
+                mode === "tree"
+                  ? "bg-black text-white"
+                  : "bg-white text-black hover:bg-gray-100"
+              }`}
+            >
+              <GitBranch size={18} strokeWidth={2.5} />
+              Skill Tree
+            </button>
           </div>
         </div>
 
@@ -219,15 +281,32 @@ export default function Home() {
               onGenerate={handleGenerate}
               loading={loading}
             />
-          ) : (
+          ) : mode === "batch" ? (
             <BatchInputSection
               value={batchUrls}
               onChange={setBatchUrls}
               onGenerate={handleBatchGenerate}
               loading={loading}
             />
+          ) : (
+            <InputSection
+              value={treeTopic}
+              onChange={setTreeTopic}
+              onGenerate={handleTreeGenerate}
+              loading={loading}
+            />
           )}
         </div>
+
+        {/* Loading Stage Indicator (Skill Tree) */}
+        {mode === "tree" && loading && loadingStage && (
+          <div className="max-w-3xl mx-auto mb-12 animate-in fade-in slide-in-from-bottom-4">
+            <div className="border-4 border-black bg-white p-6 shadow-brutal flex items-center gap-4">
+              <div className="w-5 h-5 border-4 border-black border-t-transparent rounded-full animate-spin" />
+              <p className="font-bold text-lg">{loadingStage}</p>
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -247,9 +326,16 @@ export default function Home() {
         )}
 
         {/* Preview Section */}
-        {generatedContent && (
+        {generatedContent && (mode === "single" || mode === "batch") && (
           <div className="animate-in fade-in slide-in-from-bottom-8 duration-700" data-preview>
             <PreviewSection content={generatedContent} />
+          </div>
+        )}
+
+        {/* Skill Tree Output */}
+        {mode === "tree" && skillTreeResult && (
+          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <SkillTreeOutput result={skillTreeResult} />
           </div>
         )}
       </div>

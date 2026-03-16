@@ -35,3 +35,13 @@ export interface BatchResult {
   error?: string;
   duration?: number;
 }
+
+export interface SkillTreeFile {
+  path: string;
+  content: string;
+}
+
+export interface SkillTreeResult {
+  topic: string;
+  files: SkillTreeFile[];
+}
