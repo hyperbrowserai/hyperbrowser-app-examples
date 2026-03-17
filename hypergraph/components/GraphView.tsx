@@ -65,6 +65,23 @@ export default function GraphView({
     }
   }, [data]);
 
+  // Configure d3 forces via the ref (the d3Force prop is not in the TS types)
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    const charge = fg.d3Force("charge");
+    if (charge) {
+      charge.strength(-350);
+      charge.distanceMax(500);
+    }
+    const link = fg.d3Force("link");
+    if (link) {
+      link.distance((l: any) =>
+        l.source?.type === "moc" || l.target?.type === "moc" ? 180 : 90
+      );
+    }
+  }, [data]);
+
   const nodeCanvasObject = useCallback(
     (node: AnyNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const type = node.type as NodeType;
@@ -202,21 +219,6 @@ export default function GraphView({
         d3VelocityDecay={0.2}
         cooldownTicks={100}
         onEngineStop={() => graphRef.current?.zoomToFit(400, 60)}
-        d3Force={(d3Force, forceName) => {
-          if (forceName === "charge") {
-            d3Force.strength(-350); // Increase repulsion (default is usually -30 or so)
-            d3Force.distanceMax(500);
-          }
-          if (forceName === "link") {
-            d3Force.distance((link: any) => {
-              // Push MOC nodes much further away from their children
-              if (link.source.type === "moc" || link.target.type === "moc") {
-                return 180;
-              }
-              return 90; // Standard distance for other links
-            });
-          }
-        }}
       />
 
       {/* Legend */}

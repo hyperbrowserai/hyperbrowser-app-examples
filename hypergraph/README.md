@@ -40,7 +40,7 @@ Open [http://localhost:3000](http://localhost:3000) and enter any technical topi
 ```bash
 HYPERBROWSER_API_KEY=          # from hyperbrowser.ai
 SERPER_API_KEY=                # from serper.dev — used to find source URLs
-OPENAI_API_KEY=                # used for graph generation with GPT-4o
+ANTHROPIC_API_KEY=             # used for graph generation with Claude Haiku 4.5
 HYPERBROWSER_MAX_CONCURRENCY=1 # free plan: keep at 1. paid plans can increase this.
 ```
 
@@ -54,7 +54,7 @@ If you hit a concurrency limit the app will show an amber warning banner with an
 
 - **Next.js 16** — App Router, API routes
 - **Hyperbrowser** — scrapes source material with `onlyMainContent` for clean output
-- **OpenAI GPT-4o** — generates the skill graph JSON from scraped docs
+- **Claude Haiku 4.5** — generates the skill graph JSON from scraped docs
 - **Serper** — Google search to find the best source URLs for any topic
 - **react-force-graph-2d** — force-directed graph canvas rendering
 - **react-markdown** — renders node content in the VS Code-style preview panel
