@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    
+    /* Refined Neutral Scale - Slightly warmer/softer for premium feel */
+    --neutral-50: 0 0% 99%;
+    --neutral-100: 0 0% 97%;
+    --neutral-200: 0 0% 92%;
+    --neutral-300: 0 0% 88%;
+    --neutral-400: 0 0% 75%;
+    --neutral-500: 0 0% 55%;
+    --neutral-600: 0 0% 40%;
+    --neutral-700: 0 0% 28%;
+    --neutral-800: 0 0% 18%;
+    --neutral-900: 0 0% 10%;
+    --neutral-950: 0 0% 5%;
+  }
+
+  * {
+    @apply border-neutral-200;
+  }
+
+  body {
+    @apply bg-white text-neutral-900 antialiased tracking-tight selection:bg-neutral-900 selection:text-white;
+    font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight text-neutral-900;
+  }
+}
+
+@layer components {
+  /* Premium Input Styles */
+  .input-premium {
+    @apply h-10 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 hover:border-neutral-300;
+  }
+
+  /* Premium Card Styles */
+  .card-premium {
+    @apply rounded-xl border border-neutral-200 bg-white text-neutral-900 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5;
+  }
+  
+  /* Glassmorphism */
+  .glass {
+    @apply bg-white/80 backdrop-blur-md border border-white/20;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Custom Scrollbar */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-neutral-200 rounded-full hover:bg-neutral-300 transition-colors;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
