@@ -1,7 +1,11 @@
 import OpenAI from "openai";
 import type { GraphNode, SkillGraph, GeneratedFile } from "@/types/graph";
 
-const openai = new OpenAI();
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openaiClient) openaiClient = new OpenAI();
+  return openaiClient;
+}
 
 const SYSTEM_PROMPT = `You are a domain knowledge graph architect. Given a topic and source material, produce a deeply interconnected JSON skill graph that enables an agent to UNDERSTAND the domain — not merely summarize it. This is the difference between an agent that follows instructions and an agent that understands a domain.
 
@@ -27,7 +31,7 @@ Node type definitions:
 - "gotcha" — a counterintuitive finding, failure mode, or common mistake
 
 Rules:
-- Generate 12–18 nodes total
+- Generate 8–12 nodes total (broader, higher-level concept nodes only)
 - Exactly 1 node must be type "moc"
 - Every [[wikilink]] must appear INSIDE a prose sentence that explains WHY the agent should follow it. Never list wikilinks as bare bullets — they must carry meaning through the sentence they live in.
 - The "links" array must list every node ID referenced via [[wikilinks]] in the content
@@ -46,6 +50,10 @@ MOC node requirements (type "moc"):
 - Contains an "## Explorations Needed" section with 2-3 open questions the graph does not yet answer — gaps in the current knowledge structure
 - The MOC is a navigable entry point, not a table of contents. Each link must be justified in prose.
 
+Breadth-first structure:
+- Generate broader, higher-level concept nodes. Each node should represent a domain area that COULD be expanded into 3–6 sub-concepts. Think categories, not specifics.
+- For example: prefer "Authentication Flows" over "Email Password Auth." Details arrive when the user expands a node later.
+
 Depth requirements:
 - Concept nodes must explain the underlying mechanism or theory, not just define terms
 - Pattern nodes must include when to apply the pattern and what breaks it
@@ -55,13 +63,15 @@ Depth requirements:
 
 export async function generateGraph(
   topic: string,
-  docs: { url: string; markdown: string }[]
+  docs: { url: string; markdown: string }[],
+  _depth: number = 0
 ): Promise<{ graph: SkillGraph; files: GeneratedFile[] }> {
+  void _depth;
   const truncatedDocs = docs
     .map((d) => `## Source: ${d.url}\n\n${d.markdown.slice(0, 4000)}`)
     .join("\n\n---\n\n");
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     response_format: { type: "json_object" },
     messages: [

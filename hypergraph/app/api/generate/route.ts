@@ -7,9 +7,15 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { topic } = await req.json();
+    const body = await req.json();
+    const topic =
+      typeof body.topic === "string" ? body.topic : "";
+    const depth =
+      typeof body.depth === "number" && Number.isFinite(body.depth)
+        ? body.depth
+        : 0;
 
-    if (!topic || typeof topic !== "string" || topic.trim().length === 0) {
+    if (!topic || topic.trim().length === 0) {
       return NextResponse.json(
         { error: "Topic is required" },
         { status: 400 }
@@ -32,7 +38,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { graph, files } = await generateGraph(topic.trim(), docs);
+    const { graph, files } = await generateGraph(topic.trim(), docs, depth);
 
     return NextResponse.json({ graph, files });
   } catch (err) {
