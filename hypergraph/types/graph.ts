@@ -1,5 +1,12 @@
 export type NodeType = "moc" | "concept" | "pattern" | "gotcha";
 
+/** Client-side expansion state for force-graph rendering */
+export type ExpansionVisualState =
+  | "initial"
+  | "expanded"
+  | "child"
+  | "loading";
+
 export interface GraphNode {
   id: string;
   label: string;
@@ -7,6 +14,48 @@ export interface GraphNode {
   description: string;
   content: string;
   links: string[];
+}
+
+/** Per-node metadata tracked in the client (not from the server graph JSON) */
+export interface NodeExpansionMeta {
+  state: ExpansionVisualState;
+  depth: number;
+  parentId: string | null;
+  filePath: string;
+}
+
+export interface ExpansionHistoryEntry {
+  nodeId: string;
+  depth: number;
+  timestamp: number;
+}
+
+export interface GraphRuntimeStats {
+  totalNodes: number;
+  totalLinks: number;
+  maxDepth: number;
+}
+
+export interface ExpandNodeRequestBody {
+  topic: string;
+  nodeId: string;
+  nodeContent: string;
+  existingNodeIds: string[];
+  parentContext: string;
+  parentFilePath: string;
+  parentDepth: number;
+}
+
+export interface GraphEdgePair {
+  source: string;
+  target: string;
+}
+
+export interface ExpandNodeResponse {
+  newNodes: GraphNode[];
+  newFiles: GeneratedFile[];
+  parentUpdatedContent: string;
+  newConnections: GraphEdgePair[];
 }
 
 export interface SkillGraph {
@@ -29,11 +78,23 @@ export interface ForceGraphNode {
   label: string;
   type: NodeType;
   val: number;
+  expansionState?: ExpansionVisualState;
+  depth?: number;
+  description?: string;
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+  /** Ephemeral node shown while /api/expand-node is in flight */
+  isPendingPlaceholder?: boolean;
 }
 
 export interface ForceGraphLink {
   source: string;
   target: string;
+  isTreeLink?: boolean;
+  /** True for parent → placeholder edges during expansion */
+  isPending?: boolean;
 }
 
 export interface ForceGraphData {
