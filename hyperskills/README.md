@@ -2,14 +2,15 @@
 
 **Built with [Hyperbrowser](https://hyperbrowser.ai)**
 
-HyperSkill is a Next.js application that automatically generates SKILL.md files for AI coding agents using real-time web data. Simply enter a topic or URL, and HyperSkill will search, scrape, and generate comprehensive skill documentation.
+HyperSkill is a Next.js application that automatically generates SKILL.md files for AI coding agents using real-time web data. Enter a topic or URL to search + scrape documentation, or use Vision Mode to generate a skill from a full-page screenshot.
 
 ## What it does
 
 HyperSkill automates the creation of structured SKILL.md files by:
 1. Searching the web for relevant content (via Serper API)
 2. Scraping and extracting key information (via Hyperbrowser SDK)
-3. Generating well-formatted skill documentation (via OpenAI GPT-4o)
+3. Capturing full-page screenshots for visual-only analysis (via Hyperbrowser session + Playwright)
+4. Generating well-formatted skill documentation (via OpenAI GPT-4o or Claude Opus 4.7 for vision)
 
 ## Use Case
 
@@ -23,6 +24,7 @@ You'll need API keys from:
 - [Hyperbrowser](https://hyperbrowser.ai) - for web scraping
 - [Serper](https://serper.dev) - for web search
 - [OpenAI](https://platform.openai.com) - for content generation
+- [Anthropic](https://console.anthropic.com) - for Vision Mode image analysis
 
 ### Installation
 
@@ -47,6 +49,7 @@ cp .env.example .env
 SERPER_API_KEY=your_serper_key
 HYPERBROWSER_API_KEY=your_hyperbrowser_key
 OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
 ```
 
 5. Start the development server:
@@ -76,6 +79,16 @@ npm run dev
 5. **Preview** individual skills or **Download All** as a ZIP file
 
 Perfect for onboarding entire tech stacks or generating multiple skills at once!
+
+### Vision Mode
+1. **Switch to Vision Mode** using the mode toggle
+2. **Paste a URL** for the page you want to analyze
+3. Click **Generate**
+4. HyperSkill will:
+   - Open the page in a stealth Hyperbrowser session
+   - Take a full-page screenshot
+   - Send the image to Claude Opus 4.7 for visual analysis
+5. **Preview** and export the generated SKILL.md
 
 ## Example: Using Hyperbrowser SDK
 
@@ -130,6 +143,7 @@ const result = await client.scrape.batch.startAndWait({
 ## Features
 
 - **Batch Mode**: Generate multiple SKILL.md files simultaneously
+- **Vision Mode**: Generate SKILL.md from visual UI analysis only (no HTML parsing)
 - **Parallel Processing**: Scrape multiple URLs at once with Hyperbrowser
 - **Real-time Progress**: Watch as each skill generates with live status updates
 - **ZIP Downloads**: Download all generated skills in one click
@@ -167,6 +181,7 @@ skills-generator/
 | `SERPER_API_KEY` | API key from serper.dev | Yes |
 | `HYPERBROWSER_API_KEY` | API key from hyperbrowser.ai | Yes |
 | `OPENAI_API_KEY` | API key from platform.openai.com | Yes |
+| `ANTHROPIC_API_KEY` | API key from console.anthropic.com (Vision Mode) | Vision Mode |
 
 ## License
 

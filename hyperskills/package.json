@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@hyperbrowser/sdk": "^0.82.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "d3-drag": "^3.0.0",
@@ -20,6 +21,7 @@
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
     "openai": "^6.17.0",
+    "playwright": "^1.59.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",

@@ -6,6 +6,7 @@ export interface GenerateRequest {
 export interface GenerateResponse {
   content: string;
   sources: string[];
+  screenshots?: string[];
   metadata: {
     topic: string;
     scrapedCount: number;

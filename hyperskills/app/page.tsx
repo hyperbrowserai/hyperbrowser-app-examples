@@ -8,20 +8,22 @@ import BatchResultsSection from "@/components/batch-results-section";
 import PreviewSection from "@/components/preview-section";
 import SkillTreeOutput from "@/components/skill-tree/skill-tree-output";
 import { GenerateResponse, BatchResult, SkillTreeResult } from "@/types";
-import { Key, Zap, List, GitBranch } from "lucide-react";
+import { Key, Zap, List, GitBranch, Eye } from "lucide-react";
 
-type Mode = "single" | "batch" | "tree";
+type Mode = "single" | "batch" | "tree" | "vision";
 
 export default function Home() {
   const [mode, setMode] = useState<Mode>("single");
   const [topic, setTopic] = useState("");
   const [treeTopic, setTreeTopic] = useState("");
+  const [visionUrl, setVisionUrl] = useState("");
   const [batchUrls, setBatchUrls] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
   const [skillTreeResult, setSkillTreeResult] = useState<SkillTreeResult | null>(null);
+  const [visionScreenshots, setVisionScreenshots] = useState<string[]>([]);
   const [error, setError] = useState("");
 
   const handleGenerate = async () => {
@@ -32,6 +34,7 @@ export default function Home() {
     setLoading(true);
     setError("");
     setGeneratedContent("");
+    setVisionScreenshots([]);
 
     try {
       const isUrl = topic.startsWith("http://") || topic.startsWith("https://");
@@ -77,6 +80,7 @@ export default function Home() {
     setLoading(true);
     setError("");
     setGeneratedContent("");
+    setVisionScreenshots([]);
     
     // Initialize results with processing status
     const initialResults: BatchResult[] = urls.map((url) => ({
@@ -143,6 +147,7 @@ export default function Home() {
     setLoading(true);
     setError("");
     setSkillTreeResult(null);
+    setVisionScreenshots([]);
     setLoadingStage("Searching documentation...");
 
     try {
@@ -181,10 +186,64 @@ export default function Home() {
     }
   };
 
+  const handleVisionGenerate = async () => {
+    const trimmedUrl = visionUrl.trim();
+    if (!trimmedUrl) return;
+
+    if (
+      !trimmedUrl.startsWith("http://") &&
+      !trimmedUrl.startsWith("https://")
+    ) {
+      setError("Please enter a valid URL starting with http:// or https://");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setGeneratedContent("");
+    setSkillTreeResult(null);
+    setVisionScreenshots([]);
+    setLoadingStage("Screenshotting page...");
+
+    const analyzingStageTimer = setTimeout(() => {
+      setLoadingStage("Analyzing with Opus 4.7...");
+    }, 1400);
+
+    try {
+      const response = await fetch("/api/generate-vision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: trimmedUrl }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate SKILL.md");
+      }
+
+      const skillResponse = data as GenerateResponse;
+      setGeneratedContent(skillResponse.content);
+
+      setVisionScreenshots(Array.isArray(data.screenshots) ? data.screenshots : []);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "An unknown error occurred";
+      setError(errorMessage);
+      console.error("Error generating vision skill:", err);
+    } finally {
+      clearTimeout(analyzingStageTimer);
+      setLoading(false);
+      setLoadingStage("");
+    }
+  };
+
   const handleModeSwitch = (newMode: Mode) => {
     setMode(newMode);
     setError("");
     setGeneratedContent("");
+    setVisionUrl("");
+    setVisionScreenshots([]);
     setBatchResults([]);
     setSkillTreeResult(null);
     setLoadingStage("");
@@ -269,6 +328,18 @@ export default function Home() {
               <GitBranch size={18} strokeWidth={2.5} />
               Skill Tree
             </button>
+            <div className="w-[4px] bg-black" />
+            <button
+              onClick={() => handleModeSwitch("vision")}
+              className={`px-8 py-4 font-bold text-sm uppercase tracking-wider flex items-center gap-2 transition-all ${
+                mode === "vision"
+                  ? "bg-black text-white"
+                  : "bg-white text-black hover:bg-gray-100"
+              }`}
+            >
+              <Eye size={18} strokeWidth={2.5} />
+              Vision Mode
+            </button>
           </div>
         </div>
 
@@ -288,6 +359,16 @@ export default function Home() {
               onGenerate={handleBatchGenerate}
               loading={loading}
             />
+          ) : mode === "vision" ? (
+            <InputSection
+              value={visionUrl}
+              onChange={setVisionUrl}
+              onGenerate={handleVisionGenerate}
+              loading={loading}
+              placeholder="Enter a URL to generate output from visual analysis..."
+              helperText="Vision mode (screenshot + Opus 4.7)"
+              loadingText="Analyzing"
+            />
           ) : (
             <InputSection
               value={treeTopic}
@@ -298,8 +379,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Loading Stage Indicator (Skill Tree) */}
-        {mode === "tree" && loading && loadingStage && (
+        {/* Loading Stage Indicator (Skill Tree + Vision) */}
+        {(mode === "tree" || mode === "vision") && loading && loadingStage && (
           <div className="max-w-3xl mx-auto mb-12 animate-in fade-in slide-in-from-bottom-4">
             <div className="border-4 border-black bg-white p-6 shadow-brutal flex items-center gap-4">
               <div className="w-5 h-5 border-4 border-black border-t-transparent rounded-full animate-spin" />
@@ -326,9 +407,13 @@ export default function Home() {
         )}
 
         {/* Preview Section */}
-        {generatedContent && (mode === "single" || mode === "batch") && (
+        {generatedContent &&
+          (mode === "single" || mode === "batch" || mode === "vision") && (
           <div className="animate-in fade-in slide-in-from-bottom-8 duration-700" data-preview>
-            <PreviewSection content={generatedContent} />
+            <PreviewSection
+              content={generatedContent}
+              screenshots={mode === "vision" ? visionScreenshots : []}
+            />
           </div>
         )}
 
