@@ -1,12 +1,15 @@
 "use client";
 
-import { Sparkles, ArrowRight, Terminal } from "lucide-react";
+import { ArrowRight, Terminal } from "lucide-react";
 
 interface InputSectionProps {
   value: string;
   onChange: (value: string) => void;
   onGenerate: () => void;
   loading: boolean;
+  placeholder?: string;
+  helperText?: string;
+  loadingText?: string;
 }
 
 export default function InputSection({
@@ -14,6 +17,9 @@ export default function InputSection({
   onChange,
   onGenerate,
   loading,
+  placeholder = "Enter a topic (e.g., 'Supabase Auth') or URL...",
+  helperText = "Powered by Hyperbrowser",
+  loadingText = "Processing",
 }: InputSectionProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +41,7 @@ export default function InputSection({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Enter a topic (e.g., 'Supabase Auth') or URL..."
+          placeholder={placeholder}
           className="w-full px-6 py-6 text-xl sm:text-2xl font-bold bg-transparent border-none outline-none placeholder:text-gray-400 text-black"
           disabled={loading}
           required
@@ -52,7 +58,7 @@ export default function InputSection({
             {loading ? (
               <>
                 <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                <span className="hidden sm:inline">Processing</span>
+                <span className="hidden sm:inline">{loadingText}</span>
               </>
             ) : (
               <>
@@ -66,7 +72,7 @@ export default function InputSection({
       
       {/* Helper Text */}
       <div className="mt-3 flex justify-between px-1 text-xs font-mono text-gray-500 uppercase tracking-wider">
-        <span>Powered by Hyperbrowser</span>
+        <span>{helperText}</span>
         <span>Press Enter ↵</span>
       </div>
     </form>
