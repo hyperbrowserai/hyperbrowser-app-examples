@@ -118,28 +118,51 @@ function buildGraph(files: SkillTreeFile[]) {
     }
   }
 
-  // Fallback: Ensure index.md is connected to the graph
-  const hasOutgoingFromIndex = links.some((l) => l.source === "index.md");
-  if (!hasOutgoingFromIndex && nodeIds.has("index.md")) {
-    const hasIncoming = new Set(links.map((l) => l.target));
-    // Find nodes with no incoming links (roots of subtrees)
-    const roots = nodes.filter(
-      (n) => n.id !== "index.md" && !hasIncoming.has(n.id)
-    );
+  // Ensure full connectivity: BFS from hub, then wire every unreachable node to hub.
+  const hub = nodes.find((n) => n.isIndex) ?? nodes[0];
+  if (hub && nodes.length > 1) {
+    // Build undirected adjacency for reachability
+    const adj = new Map<string, Set<string>>();
+    for (const n of nodes) adj.set(n.id, new Set());
+    for (const l of links) {
+      const s = typeof l.source === "string" ? l.source : (l.source as GraphNode).id;
+      const t = typeof l.target === "string" ? l.target : (l.target as GraphNode).id;
+      adj.get(s)?.add(t);
+      adj.get(t)?.add(s);
+    }
 
-    if (roots.length > 0) {
-      roots.forEach((r) => links.push({ source: "index.md", target: r.id }));
-    } else {
-      // If no roots, just link index to one node per group
-      const groupReps = new Map();
-      nodes.forEach((n) => {
-        if (n.id !== "index.md" && !groupReps.has(n.group)) {
-          groupReps.set(n.group, n.id);
+    // BFS from hub
+    const visited = new Set<string>();
+    const queue = [hub.id];
+    visited.add(hub.id);
+    while (queue.length) {
+      const cur = queue.shift()!;
+      for (const neighbor of adj.get(cur) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
         }
-      });
-      groupReps.forEach((targetId) =>
-        links.push({ source: "index.md", target: targetId })
-      );
+      }
+    }
+
+    // Connect every unreachable node (or cluster root) to the hub
+    for (const node of nodes) {
+      if (!visited.has(node.id)) {
+        const key = `${hub.id}→${node.id}`;
+        if (!linkSet.has(key)) {
+          linkSet.add(key);
+          links.push({ source: hub.id, target: node.id });
+          // Mark newly reachable: BFS from this node so its cluster counts as visited
+          const q2 = [node.id];
+          visited.add(node.id);
+          while (q2.length) {
+            const c = q2.shift()!;
+            for (const nb of adj.get(c) ?? []) {
+              if (!visited.has(nb)) { visited.add(nb); q2.push(nb); }
+            }
+          }
+        }
+      }
     }
   }
 

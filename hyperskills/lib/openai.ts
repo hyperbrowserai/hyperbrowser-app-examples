@@ -1,28 +1,7 @@
 import OpenAI from "openai";
 import { ScrapedContent, SkillTreeResult } from "@/types";
 
-export async function generateSkill(
-  topic: string,
-  scrapedData: ScrapedContent[]
-): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
-
-  const openai = new OpenAI({
-    apiKey: apiKey,
-  });
-
-  // Prepare context from scraped content
-  const context = scrapedData
-    .map((content, index) => {
-      return `Source ${index + 1}: ${content.url}\n\n${content.markdown}\n\n---\n`;
-    })
-    .join("\n");
-
-  const systemPrompt = `You are an expert at creating SKILL.md files for Claude Code AI agents following the official format.
+const SKILL_SYSTEM_PROMPT = `You are an expert at creating SKILL.md files for Claude Code AI agents following the official format.
 
 CRITICAL FORMATTING RULES:
 
@@ -84,6 +63,27 @@ CRITICAL RULES:
 - name: kebab-case, max 64 chars
 - description: max 1024 chars, includes ALL triggers`;
 
+export async function generateSkill(
+  topic: string,
+  scrapedData: ScrapedContent[]
+): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const openai = new OpenAI({
+    apiKey: apiKey,
+  });
+
+  // Prepare context from scraped content
+  const context = scrapedData
+    .map((content, index) => {
+      return `Source ${index + 1}: ${content.url}\n\n${content.markdown}\n\n---\n`;
+    })
+    .join("\n");
+
   const userPrompt = `Create a SKILL.md file for the topic: "${topic}"
 
 Use the following scraped content from web sources:
@@ -101,7 +101,7 @@ Generate a complete SKILL.md file following the official Claude Code format:
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: SKILL_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.5,
@@ -123,10 +123,13 @@ Generate a complete SKILL.md file following the official Claude Code format:
   }
 }
 
-export async function generateSkillTree(
+/**
+ * Stream a SKILL.md for Auto Mode (same format as generateSkill).
+ */
+export async function* streamGenerateSkill(
   topic: string,
-  scrapedData: ScrapedContent[]
-): Promise<SkillTreeResult> {
+  researchMarkdown: string
+): AsyncGenerator<string> {
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
@@ -135,13 +138,39 @@ export async function generateSkillTree(
 
   const openai = new OpenAI({ apiKey });
 
-  const context = scrapedData
-    .map((content, index) => {
-      return `Source ${index + 1}: ${content.url}\n\n${content.markdown}\n\n---\n`;
-    })
-    .join("\n");
+  const userPrompt = `Create a SKILL.md file for the topic: "${topic}"
 
-  const systemPrompt = `You are a skill tree generator for Claude Code AI agents. Given scraped documentation, generate a knowledge graph of interconnected SKILL.md files — each one a real, actionable skill file, not a stub.
+Use the following research content collected by an autonomous browser agent (JSON and notes):
+
+${researchMarkdown}
+
+Generate a complete SKILL.md file following the official Claude Code format:
+1. Convert "${topic}" to kebab-case for the name field
+2. Write a comprehensive description (max 1024 chars) that includes WHEN Claude should use this skill
+3. Use imperative instructions in the body
+4. Extract real code examples from the research content when present
+5. Keep total length under 500 lines`;
+
+  const stream = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: SKILL_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.5,
+    max_tokens: 3500,
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    const piece = chunk.choices[0]?.delta?.content;
+    if (piece) {
+      yield piece;
+    }
+  }
+}
+
+const SKILL_TREE_SYSTEM_PROMPT = `You are a skill tree generator for Claude Code AI agents. Given scraped documentation, generate a knowledge graph of interconnected SKILL.md files — each one a real, actionable skill file, not a stub.
 
 Output a JSON object:
 {
@@ -203,6 +232,77 @@ INDEX.MD RULES:
 
 Return ONLY the JSON object.`;
 
+function parseSkillTreeResult(content: string): SkillTreeResult {
+  const parsed: SkillTreeResult = JSON.parse(content);
+  if (!parsed.topic || !Array.isArray(parsed.files) || parsed.files.length === 0) {
+    throw new Error("Invalid skill tree structure returned from OpenAI");
+  }
+  return parsed;
+}
+
+/**
+ * Generate a skill tree from HyperAgent's raw JSON research output.
+ * Mirrors HyperLearn's approach — richer input means richer files.
+ */
+export async function generateSkillTreeFromAgent(
+  topic: string,
+  agentResult: string
+): Promise<SkillTreeResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+
+  const openai = new OpenAI({ apiKey });
+
+  const userPrompt = `Create a skill tree for: "${topic}"
+
+Extracted documentation content (from autonomous browser agent):
+
+${agentResult}
+
+Generate 8-12 deeply detailed, interconnected skill files. Each file must have real code examples, specific API details, and actionable instructions extracted from the sources above. Do not generate thin stubs.`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: SKILL_TREE_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.5,
+    max_tokens: 16384,
+    response_format: { type: "json_object" },
+  });
+
+  const content = completion.choices[0]?.message?.content;
+  if (!content) throw new Error("No content generated from OpenAI");
+
+  try {
+    return parseSkillTreeResult(content);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error("Failed to parse skill tree JSON from OpenAI");
+    }
+    throw error;
+  }
+}
+
+export async function generateSkillTree(
+  topic: string,
+  scrapedData: ScrapedContent[]
+): Promise<SkillTreeResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const openai = new OpenAI({ apiKey });
+
+  const context = scrapedData
+    .map((content, index) => {
+      return `Source ${index + 1}: ${content.url}\n\n${content.markdown}\n\n---\n`;
+    })
+    .join("\n");
+
   const userPrompt = `Create a skill tree for: "${topic}"
 
 Scraped documentation content:
@@ -212,10 +312,11 @@ ${context}
 Generate 8-12 deeply detailed, interconnected skill files. Each file must have real code examples, specific API details, and actionable instructions extracted from the sources above. Do not generate thin stubs.`;
 
   try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: SKILL_TREE_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.5,
@@ -224,18 +325,9 @@ Generate 8-12 deeply detailed, interconnected skill files. Each file must have r
     });
 
     const content = completion.choices[0]?.message?.content;
+    if (!content) throw new Error("No content generated from OpenAI");
 
-    if (!content) {
-      throw new Error("No content generated from OpenAI");
-    }
-
-    const parsed: SkillTreeResult = JSON.parse(content);
-
-    if (!parsed.topic || !Array.isArray(parsed.files) || parsed.files.length === 0) {
-      throw new Error("Invalid skill tree structure returned from OpenAI");
-    }
-
-    return parsed;
+    return parseSkillTreeResult(content);
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error("Failed to parse skill tree JSON from OpenAI");
@@ -244,5 +336,79 @@ Generate 8-12 deeply detailed, interconnected skill files. Each file must have r
       throw new Error(`Failed to generate skill tree: ${error.message}`);
     }
     throw new Error("Failed to generate skill tree: Unknown error");
+  }
+}
+
+/**
+ * Generate a single skill file from one scraped page.
+ * Returns null on failure so the caller can skip gracefully.
+ */
+export async function generateSingleSkillFile(
+  topic: string,
+  url: string,
+  markdownContent: string
+): Promise<{ path: string; content: string } | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+
+  const openai = new OpenAI({ apiKey });
+
+  const systemPrompt = `You are an expert at creating concise, actionable skill files for AI coding agents.
+Given a single documentation page, extract the most important concepts and produce ONE skill file.
+
+Return a JSON object with this exact shape:
+{
+  "path": "kebab-case-filename.md",
+  "content": "full markdown content of the skill file"
+}
+
+The skill file content MUST follow this format:
+---
+name: <topic-slug>
+description: <What this covers and when to use it. Max 200 chars.>
+---
+
+# <Title>
+
+## Key Information
+- <real facts from the page>
+
+## Implementation
+<imperative steps with real code from the page>
+
+## Related Concepts
+Weave [[wikilinks]] inline to related subtopics of the same subject area. For example
+if the topic is "supabase auth" and you mention row-level security, write [[row-level-security]].
+Link to 2-4 sibling concepts using kebab-case slugs — these become graph edges.
+
+## Sources
+- <url>
+
+Keep the file under 200 lines. Use real information from the page only. No invented APIs.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Topic: "${topic}"\nSource URL: ${url}\n\nPage content:\n\n${markdownContent.slice(0, 8000)}`,
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 2048,
+      response_format: { type: "json_object" },
+    });
+
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as { path?: string; content?: string };
+    if (!parsed.path || !parsed.content) return null;
+
+    return { path: parsed.path, content: parsed.content };
+  } catch {
+    return null;
   }
 }

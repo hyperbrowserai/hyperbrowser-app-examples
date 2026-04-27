@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Terminal } from "lucide-react";
+import { ArrowRight, Terminal, Square } from "lucide-react";
 
 interface InputSectionProps {
   value: string;
@@ -10,6 +10,7 @@ interface InputSectionProps {
   placeholder?: string;
   helperText?: string;
   loadingText?: string;
+  onStop?: () => void;
 }
 
 export default function InputSection({
@@ -20,6 +21,7 @@ export default function InputSection({
   placeholder = "Enter a topic (e.g., 'Supabase Auth') or URL...",
   helperText = "Powered by Hyperbrowser",
   loadingText = "Processing",
+  onStop,
 }: InputSectionProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +51,17 @@ export default function InputSection({
         />
 
         {/* Right Action Button */}
-        <div className="pr-3">
+        <div className="pr-3 flex items-center gap-2">
+          {loading && onStop && (
+            <button
+              type="button"
+              onClick={onStop}
+              className="h-12 px-4 bg-white text-black border-4 border-black font-bold text-sm uppercase tracking-wider flex items-center gap-2 hover:bg-gray-100 transition-colors shrink-0"
+            >
+              <Square size={16} strokeWidth={2.5} className="fill-current" />
+              <span className="hidden sm:inline">Stop</span>
+            </button>
+          )}
           <button
             type="submit"
             disabled={loading || !value.trim()}
