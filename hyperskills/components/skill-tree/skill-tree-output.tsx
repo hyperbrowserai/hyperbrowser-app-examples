@@ -1,7 +1,7 @@
 "use client";
 
 import { SkillTreeResult } from "@/types";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Download, Loader2, FileText, Share2 } from "lucide-react";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -12,11 +12,19 @@ import GraphView from "./graph-view";
 
 interface SkillTreeOutputProps {
   result: SkillTreeResult;
+  /** False while SSE is still emitting files (HyperLearn-style stream). */
+  streamComplete?: boolean;
+  /** Hide the Graph View tab (e.g. when a live graph is already shown above). */
+  hideGraphTab?: boolean;
 }
 
 type ViewTab = "file" | "graph";
 
-export default function SkillTreeOutput({ result }: SkillTreeOutputProps) {
+export default function SkillTreeOutput({
+  result,
+  streamComplete = true,
+  hideGraphTab = false,
+}: SkillTreeOutputProps) {
   const [selectedFile, setSelectedFile] = useState<string>(
     result.files.find((f) => f.path === "index.md")?.path ||
       result.files[0]?.path ||
@@ -24,6 +32,17 @@ export default function SkillTreeOutput({ result }: SkillTreeOutputProps) {
   );
   const [viewTab, setViewTab] = useState<ViewTab>("file");
   const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    const exists =
+      selectedFile && result.files.some((f) => f.path === selectedFile);
+    if (exists) return;
+    const preferred =
+      result.files.find((f) => f.path === "index.md")?.path ||
+      result.files[0]?.path ||
+      "";
+    if (preferred) setSelectedFile(preferred);
+  }, [result.files, result.topic, selectedFile]);
 
   const handleSelectFile = useCallback((path: string) => {
     setSelectedFile(path);
@@ -74,40 +93,48 @@ export default function SkillTreeOutput({ result }: SkillTreeOutputProps) {
               </div>
               <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-wider text-gray-500">
                 <span>{result.files.length} files</span>
+                {!streamComplete && (
+                  <span className="flex items-center gap-1.5 text-gray-400">
+                    <Loader2 size={12} className="animate-spin" />
+                    Streaming
+                  </span>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              {/* View Toggle */}
-              <div className="flex border border-gray-700">
-                <button
-                  onClick={() => setViewTab("file")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
-                    viewTab === "file"
-                      ? "bg-white text-black"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  <FileText size={12} />
-                  File View
-                </button>
-                <button
-                  onClick={() => setViewTab("graph")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
-                    viewTab === "graph"
-                      ? "bg-white text-black"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  <Share2 size={12} />
-                  Graph View
-                </button>
-              </div>
+              {/* View Toggle — hidden when graph is shown elsewhere */}
+              {!hideGraphTab && (
+                <div className="flex border border-gray-700">
+                  <button
+                    onClick={() => setViewTab("file")}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
+                      viewTab === "file"
+                        ? "bg-white text-black"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <FileText size={12} />
+                    File View
+                  </button>
+                  <button
+                    onClick={() => setViewTab("graph")}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
+                      viewTab === "graph"
+                        ? "bg-white text-black"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <Share2 size={12} />
+                    Graph View
+                  </button>
+                </div>
+              )}
 
               {/* Download */}
               <button
                 onClick={handleDownloadZip}
-                disabled={downloading}
+                disabled={downloading || !streamComplete || result.files.length === 0}
                 className="px-4 py-1.5 bg-white text-black text-xs font-bold uppercase tracking-wider hover:bg-gray-200 transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 {downloading ? (
