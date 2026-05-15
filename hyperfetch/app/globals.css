@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f2eb;
+  --surface: #fbfaf6;
+  --foreground: #111111;
+  --muted: #6b6b6b;
+  --subtle: #ecead9;
+  --border: #d8d5c7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: #0a0a0a;
+  color: #ffffff;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    #ecead9 0%,
+    #e0deca 40%,
+    #ecead9 80%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+.caret {
+  display: inline-block;
+  width: 0.55ch;
+  height: 0.95em;
+  vertical-align: -0.12em;
+  background: currentColor;
+  margin-left: 2px;
+  animation: blink 0.9s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes scan-sweep {
+  0% {
+    transform: translateX(-10%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #c5c2b1;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
