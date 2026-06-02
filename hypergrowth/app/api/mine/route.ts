@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { buildDemoResult } from "@/lib/demo-data";
 import { getHyperbrowserClient } from "@/lib/hyperbrowser";
+import { normalizeSignals } from "@/lib/normalize";
+import { runSignalPipeline } from "@/lib/pipeline";
 import { mineRequestSchema } from "@/lib/schema";
 import { mineSource } from "@/lib/sources";
-import { synthesizeSignals } from "@/lib/synthesis";
-import type { MineResult, PainSignal } from "@/lib/types";
+import type { MineResult, RawSignal } from "@/lib/types";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -31,18 +32,18 @@ export async function POST(request: Request) {
     sources.map((source) => mineSource(client, source, query, perSourceLimit))
   );
 
-  const signals: PainSignal[] = [];
+  const rawSignals: RawSignal[] = [];
 
   settled.forEach((result, index) => {
     if (result.status === "fulfilled") {
-      signals.push(...result.value);
+      rawSignals.push(...result.value);
       return;
     }
 
     errors.push(`${sources[index]}: ${result.reason}`);
   });
 
-  if (signals.length === 0) {
+  if (rawSignals.length === 0) {
     const demo = buildDemoResult(query);
     return NextResponse.json({
       ...demo,
@@ -57,13 +58,36 @@ export async function POST(request: Request) {
     });
   }
 
-  const synthesis = await synthesizeSignals(query, signals.slice(0, maxResults));
+  const normalizedSignals = normalizeSignals(rawSignals, query).slice(0, maxResults);
+
+  if (normalizedSignals.length === 0) {
+    const demo = buildDemoResult(query);
+    return NextResponse.json({
+      ...demo,
+      metadata: {
+        ...demo.metadata,
+        searchedSources: sources,
+        errors,
+        notes: [
+          "Live sources were fetched but did not produce enough normalized evidence, so demo data is shown.",
+        ],
+      },
+    });
+  }
+
+  const pipeline = await runSignalPipeline(query, normalizedSignals);
   const result: MineResult = {
     query,
     generatedAt: new Date().toISOString(),
     mode: "live",
-    signals: signals.slice(0, maxResults),
-    ...synthesis,
+    signals: pipeline.signals,
+    clusters: pipeline.clusters,
+    growthPlays: pipeline.growthPlays,
+    outboundDrafts: pipeline.outboundDrafts,
+    contentAngles: pipeline.contentAngles,
+    signalScores: pipeline.signalScores,
+    dedupeGroups: pipeline.dedupeGroups,
+    brief: pipeline.brief,
     metadata: {
       searchedSources: sources,
       errors,

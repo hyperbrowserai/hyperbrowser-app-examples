@@ -1,89 +1,60 @@
 import OpenAI from "openai";
-import type { GrowthPlay, MineResult, PainCluster, PainSignal } from "./types";
+import type {
+  GrowthPlay,
+  MinePipelineResult,
+  PainCluster,
+  PainSignal,
+  SignalScore,
+} from "./types";
+
+type SynthesisInput = {
+  query: string;
+  signals: PainSignal[];
+  signalScores: SignalScore[];
+  clusters: PainCluster[];
+  candidatePlays: GrowthPlay[];
+};
 
 type Synthesis = Pick<
-  MineResult,
+  MinePipelineResult,
   "clusters" | "growthPlays" | "outboundDrafts" | "contentAngles"
 >;
 
 export async function synthesizeSignals(
-  query: string,
-  signals: PainSignal[]
+  input: SynthesisInput
 ): Promise<Synthesis> {
   if (!process.env.OPENAI_API_KEY) {
-    return synthesizeHeuristically(signals);
+    return synthesizeDeterministically(input.clusters, input.candidatePlays);
   }
 
   try {
-    return await synthesizeWithOpenAI(query, signals);
+    return await synthesizeWithOpenAI(input);
   } catch {
-    return synthesizeHeuristically(signals);
+    return synthesizeDeterministically(input.clusters, input.candidatePlays);
   }
 }
 
-export function synthesizeHeuristically(signals: PainSignal[]): Synthesis {
-  const clusterMap = new Map<string, PainSignal[]>();
-
-  for (const signal of signals) {
-    const existing = clusterMap.get(signal.painCategory) ?? [];
-    existing.push(signal);
-    clusterMap.set(signal.painCategory, existing);
-  }
-
-  const clusters: PainCluster[] = Array.from(clusterMap.entries()).map(
-    ([category, categorySignals], index) => ({
-      id: `cluster-${index + 1}`,
-      title: titleCase(category),
-      summary: `Developers are repeatedly surfacing ${category} while trying to automate or extract web data.`,
-      frequency: categorySignals.length,
-      urgency: categorySignals.some((signal) => signal.urgency === "high")
-        ? "high"
-        : categorySignals.some((signal) => signal.urgency === "medium")
-          ? "medium"
-          : "low",
-      representativeQuotes: categorySignals
-        .slice(0, 3)
-        .map((signal) => signal.quote),
-      relatedTools: Array.from(
-        new Set(categorySignals.flatMap((signal) => signal.toolsMentioned))
-      ).slice(0, 6),
-      signalIds: categorySignals.map((signal) => signal.id),
-    })
-  );
-
-  const growthPlays: GrowthPlay[] = clusters.slice(0, 4).map((cluster, index) => ({
-    id: `play-${index + 1}`,
-    channel: index % 2 === 0 ? "content" : "outbound",
-    title: `Turn "${cluster.title}" into a growth experiment`,
-    insight: cluster.summary,
-    recommendedAction:
-      index % 2 === 0
-        ? "Publish a technical teardown that names the failure mode and shows how managed browser infrastructure removes it."
-        : "Build a small outbound segment around teams publicly discussing this failure mode.",
-    copyDraft:
-      index % 2 === 0
-        ? "Your browser automation does not fail in demos. It fails on the real web."
-        : `Saw your team discussing ${cluster.title.toLowerCase()}. Hyperbrowser is built to make that browser layer reliable without owning the fleet.`,
-    supportingSignalIds: cluster.signalIds,
-  }));
-
+export function synthesizeDeterministically(
+  clusters: PainCluster[],
+  candidatePlays: GrowthPlay[]
+): Synthesis {
   return {
     clusters,
-    growthPlays,
-    outboundDrafts: growthPlays
+    growthPlays: candidatePlays,
+    outboundDrafts: candidatePlays
       .filter((play) => play.channel === "outbound")
+      .slice(0, 5)
       .map((play) => play.copyDraft),
-    contentAngles: growthPlays
+    contentAngles: candidatePlays
       .filter((play) => play.channel === "content")
+      .slice(0, 5)
       .map((play) => play.title),
   };
 }
 
-async function synthesizeWithOpenAI(
-  query: string,
-  signals: PainSignal[]
-): Promise<Synthesis> {
+async function synthesizeWithOpenAI(input: SynthesisInput): Promise<Synthesis> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const allowedSignalIds = new Set(input.signals.map((signal) => signal.id));
   const response = await openai.chat.completions.create({
     model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
     response_format: { type: "json_object" },
@@ -91,21 +62,31 @@ async function synthesizeWithOpenAI(
       {
         role: "system",
         content:
-          "You are a growth engineer for a developer-tools company. Cluster evidence into concrete GTM plays. Use only the provided signals. Return valid JSON.",
+          "You are a growth engineer for a developer-tools company. You refine already-scored evidence into concise growth recommendations. Use only provided evidence. Every cluster and growth play must cite existing signal IDs. Do not invent URLs, quotes, companies, metrics, or sources. Return valid JSON only.",
       },
       {
         role: "user",
         content: JSON.stringify({
-          query,
+          query: input.query,
+          constraints: [
+            "Keep cluster ids from the provided clusters.",
+            "Keep growth play ids from the provided candidate plays.",
+            "Every cited signal id must exist in signals.",
+            "Do not remove score objects if present.",
+            "Prefer concrete actions over generic strategy language.",
+          ],
           requiredShape: {
             clusters:
-              "PainCluster[] with id,title,summary,frequency,urgency,representativeQuotes,relatedTools,signalIds",
+              "PainCluster[] with id,title,summary,frequency,urgency,representativeQuotes,relatedTools,signalIds,sourceDiversity,averagePainIntensity,averageHyperbrowserFit,clusterStrength,confidence",
             growthPlays:
-              "GrowthPlay[] with id,channel,title,insight,recommendedAction,copyDraft,supportingSignalIds",
+              "GrowthPlay[] with id,channel,title,insight,recommendedAction,copyDraft,supportingSignalIds,score",
             outboundDrafts: "string[]",
             contentAngles: "string[]",
           },
-          signals,
+          signals: input.signals,
+          signalScores: input.signalScores,
+          clusters: input.clusters,
+          candidatePlays: input.candidatePlays,
         }),
       },
     ],
@@ -115,22 +96,101 @@ async function synthesizeWithOpenAI(
   if (!raw) throw new Error("OpenAI returned an empty response.");
 
   const parsed = JSON.parse(raw) as Partial<Synthesis>;
+  const clusters = validateClusters(parsed.clusters, input.clusters, allowedSignalIds);
+  const growthPlays = validateGrowthPlays(
+    parsed.growthPlays,
+    input.candidatePlays,
+    allowedSignalIds
+  );
 
   return {
-    clusters: Array.isArray(parsed.clusters) ? parsed.clusters : [],
-    growthPlays: Array.isArray(parsed.growthPlays) ? parsed.growthPlays : [],
+    clusters,
+    growthPlays,
     outboundDrafts: Array.isArray(parsed.outboundDrafts)
-      ? parsed.outboundDrafts
-      : [],
+      ? parsed.outboundDrafts.filter((draft) => typeof draft === "string").slice(0, 8)
+      : growthPlays
+          .filter((play) => play.channel === "outbound")
+          .map((play) => play.copyDraft),
     contentAngles: Array.isArray(parsed.contentAngles)
-      ? parsed.contentAngles
-      : [],
+      ? parsed.contentAngles.filter((angle) => typeof angle === "string").slice(0, 8)
+      : growthPlays
+          .filter((play) => play.channel === "content")
+          .map((play) => play.title),
   };
 }
 
-function titleCase(value: string): string {
-  return value
-    .split(/\s+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function validateClusters(
+  proposed: unknown,
+  fallback: PainCluster[],
+  allowedSignalIds: Set<string>
+): PainCluster[] {
+  if (!Array.isArray(proposed)) return fallback;
+
+  const byId = new Map(fallback.map((cluster) => [cluster.id, cluster]));
+
+  return proposed
+    .map((cluster) => {
+      if (typeof cluster !== "object" || cluster === null) return null;
+
+      const record = cluster as Partial<PainCluster>;
+      if (!record.id || !byId.has(record.id)) return null;
+
+      const original = byId.get(record.id)!;
+      const signalIds = Array.isArray(record.signalIds)
+        ? record.signalIds.filter((id): id is string => allowedSignalIds.has(String(id)))
+        : original.signalIds;
+
+      if (signalIds.length === 0) return null;
+
+      return {
+        ...original,
+        ...record,
+        signalIds,
+        representativeQuotes: Array.isArray(record.representativeQuotes)
+          ? record.representativeQuotes.filter(
+              (quote): quote is string => typeof quote === "string"
+            )
+          : original.representativeQuotes,
+        relatedTools: Array.isArray(record.relatedTools)
+          ? record.relatedTools.filter((tool): tool is string => typeof tool === "string")
+          : original.relatedTools,
+      };
+    })
+    .filter((cluster): cluster is PainCluster => Boolean(cluster));
+}
+
+function validateGrowthPlays(
+  proposed: unknown,
+  fallback: GrowthPlay[],
+  allowedSignalIds: Set<string>
+): GrowthPlay[] {
+  if (!Array.isArray(proposed)) return fallback;
+
+  const byId = new Map(fallback.map((play) => [play.id, play]));
+  const validPlays: GrowthPlay[] = [];
+
+  for (const play of proposed) {
+    if (typeof play !== "object" || play === null) continue;
+
+    const record = play as Partial<GrowthPlay>;
+    if (!record.id || !byId.has(record.id)) continue;
+
+    const original = byId.get(record.id)!;
+    const supportingSignalIds = Array.isArray(record.supportingSignalIds)
+      ? record.supportingSignalIds.filter((id): id is string =>
+          allowedSignalIds.has(String(id))
+        )
+      : original.supportingSignalIds;
+
+    if (supportingSignalIds.length === 0) continue;
+
+    validPlays.push({
+      ...original,
+      ...record,
+      supportingSignalIds,
+      score: original.score,
+    });
+  }
+
+  return validPlays.length ? validPlays : fallback;
 }
