@@ -1,5 +1,11 @@
 import { buildGrowthBrief } from "./brief";
-import type { MineResult, PainSignal, SignalScore } from "./types";
+import type {
+  AnalysisMode,
+  MineResult,
+  PainSignal,
+  SignalScore,
+} from "./types";
+import type { AnalysisModeResolution } from "./analysis-mode";
 
 const demoGeneratedAt = new Date().toISOString();
 
@@ -20,6 +26,8 @@ export const demoSignals: PainSignal[] = [
     urgency: "high",
     engagement: 84,
     engagementDetails: { score: 52, comments: 32 },
+    evidenceKind: "story",
+    sourceReliabilityOverride: 0.76,
   },
   {
     id: "demo-2",
@@ -37,6 +45,10 @@ export const demoSignals: PainSignal[] = [
     urgency: "high",
     engagement: 31,
     engagementDetails: { reactions: 18, comments: 13 },
+    evidenceKind: "issue",
+    repo: "microsoft/playwright",
+    ecosystemBoost: true,
+    sourceReliabilityOverride: 0.86,
   },
   {
     id: "demo-3",
@@ -54,6 +66,8 @@ export const demoSignals: PainSignal[] = [
     urgency: "medium",
     engagement: 47,
     engagementDetails: { score: 41, comments: 6 },
+    evidenceKind: "post",
+    sourceReliabilityOverride: 0.62,
   },
 ];
 
@@ -106,8 +120,20 @@ const demoSignalScores: SignalScore[] = [
   },
 ];
 
-export function buildDemoResult(query = "browser automation pain"): MineResult {
+export function buildDemoResult(
+  query = "browser automation pain",
+  requestedAnalysisMode: AnalysisMode = "balanced",
+  mode?: AnalysisModeResolution
+): MineResult {
   const generatedAt = new Date().toISOString();
+  const modeResolution = mode ?? {
+    requestedAnalysisMode,
+    effectiveAnalysisMode: "deterministic" as const,
+    analysisMode: "demo" as const,
+    allowedCalls: 0,
+    downgradeReason:
+      "No Hyperbrowser API key configured; demo mode uses deterministic sample data.",
+  };
   const clusters = [
     {
       id: "cluster-anti-bot",
@@ -209,6 +235,7 @@ export function buildDemoResult(query = "browser automation pain"): MineResult {
     dedupeGroups: [],
     brief: buildGrowthBrief({
       query,
+      analysisMode: modeResolution.effectiveAnalysisMode,
       clusters,
       growthPlays,
       signals: demoSignals,
@@ -219,8 +246,18 @@ export function buildDemoResult(query = "browser automation pain"): MineResult {
       errors: [],
       notes: [
         "Demo mode is shown when HYPERBROWSER_API_KEY is not configured.",
-        "Add OPENAI_API_KEY to enable LLM clustering instead of heuristic synthesis.",
+        "Configure HYPERBROWSER_API_KEY for live public evidence collection.",
       ],
+      requestedAnalysisMode: modeResolution.requestedAnalysisMode,
+      effectiveAnalysisMode: modeResolution.effectiveAnalysisMode,
+      analysisMode: modeResolution.analysisMode,
+      downgradeReason: modeResolution.downgradeReason,
+      llm: {
+        queryExpansionMode: "disabled",
+        judgmentMode: "disabled",
+        synthesisMode: "disabled",
+        callsAttempted: 0,
+      },
     },
   };
 }

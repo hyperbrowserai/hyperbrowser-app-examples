@@ -18,8 +18,11 @@ Growth teams at developer-tool companies need to find where demand is already le
 - Jaccard-based dedupe to compress repeated evidence before clustering
 - Cluster strength scoring using frequency, source diversity, pain intensity, and Hyperbrowser fit
 - Expected-value scoring for growth plays across content, outbound, community, and landing-page channels
-- OpenAI-powered grounded synthesis when `OPENAI_API_KEY` is available
-- Heuristic synthesis and demo data fallback for local exploration without keys
+- Source-aware query planning with deterministic fallback and optional LLM expansion
+- Optional LLM judgment on a bounded batch of high-score and borderline signals
+- Dimension-specific score fusion between deterministic scores and contextual LLM judgment
+- Generic OpenAI-compatible provider support for OpenRouter, NVIDIA NIM-style endpoints, OpenAI, or local-compatible gateways
+- Heuristic synthesis and deterministic demo data for local exploration without keys
 
 ## Getting Started
 
@@ -39,7 +42,23 @@ cp env.example .env.local
 
 ```env
 HYPERBROWSER_API_KEY=your_hyperbrowser_api_key
+
+# Optional generic OpenAI-compatible provider
+LLM_PROVIDER=openrouter
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=your_provider_key
+LLM_MODEL=your_model
+LLM_SITE_URL=http://localhost:3000
+LLM_APP_NAME=HyperGrowth
+
+# Optional OpenAI fallback when LLM_API_KEY is not set
 OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4.1-mini
+
+# Optional safety clamp
+LLM_MAX_CALLS_PER_RUN=2
+LLM_TIMEOUT_MS=12000
+HYPERBROWSER_TIMEOUT_MS=12000
 ```
 
 4. Run the development server:
@@ -54,14 +73,18 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Enter a developer-market pain or topic, such as `Playwright captcha failures`.
 2. Select public sources: Hacker News, GitHub Issues, and Reddit.
-3. Source adapters collect raw evidence. Hacker News uses the Algolia API first, while other source pages are fetched with Hyperbrowser.
-4. HyperGrowth normalizes raw evidence into `PainSignal` records with source URL, canonical URL, quote, author, timestamp, engagement, matched terms, tools mentioned, category, and urgency.
-5. The scoring engine assigns deterministic scores for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, confidence, and total signal value.
-6. The dedupe engine compresses near-duplicate evidence using Jaccard similarity.
-7. The clustering engine groups evidence by pain category and calculates cluster strength using frequency, source diversity, average pain intensity, and Hyperbrowser fit.
-8. The growth-play engine ranks actions by expected value, balancing commercial value, evidence strength, channel fit, confidence, and execution cost.
-9. OpenAI optionally refines cluster and play language, but every claim must cite existing signal IDs. If no OpenAI key is configured, deterministic synthesis is used.
-10. The API returns a growth brief plus UI-compatible fields for evidence quotes, clusters, content angles, and outbound drafts.
+3. HyperGrowth builds a source-routed query plan. In lean, balanced, or full mode, an LLM can generate source-specific search queries; otherwise the deterministic static plan is used.
+4. Source adapters collect raw evidence. Hacker News uses Algolia stories plus comments, GitHub uses issue search with browser-automation ecosystem boosts, and Reddit searches selected subreddits before a global fallback.
+   Reddit fetches use Hyperbrowser stealth mode because Reddit may block automated traffic. If Reddit still blocks, use a Hyperbrowser plan or BYOK setup that supports proxy-backed sessions.
+5. HyperGrowth normalizes raw evidence into `PainSignal` records with source URL, canonical URL, quote, author, timestamp, engagement, evidence kind, repository, matched terms, tools mentioned, category, and urgency.
+6. The scoring engine assigns deterministic scores for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, confidence, and total signal value.
+7. The dedupe engine compresses near-duplicate evidence using Jaccard similarity.
+8. Balanced and full modes send a small mixed batch to the LLM for contextual judgment. Invalid output gets one repair attempt, then deterministic fallback.
+9. Score fusion combines heuristic dimensions with LLM dimensions while keeping recency and source reliability deterministic.
+10. The clustering engine groups evidence by pain category and calculates cluster strength using frequency, source diversity, average pain intensity, and Hyperbrowser fit.
+11. The growth-play engine ranks actions by expected value, balancing commercial value, evidence strength, channel fit, confidence, and execution cost.
+12. Full mode can optionally refine cluster and play language, but every claim must cite existing signal IDs. If synthesis fails, deterministic synthesis is used.
+13. The API returns a growth brief plus UI-compatible fields for evidence quotes, clusters, content angles, outbound drafts, diagnostics, and LLM usage metadata.
 
 ## Signal Pipeline
 
@@ -69,9 +92,12 @@ HyperGrowth treats growth research as an evidence-to-action pipeline:
 
 ```txt
 raw community evidence
+-> source-routed query plan
 -> normalized pain signals
 -> deterministic signal scores
 -> deduped evidence groups
+-> optional LLM judgment batch
+-> fused scores and refined categories
 -> pain clusters
 -> expected-value-ranked growth plays
 -> grounded growth brief
@@ -113,46 +139,66 @@ total =
 
 This makes the system explainable and cheap to run. A GitHub issue about a production browser-session failure should score differently from a casual Reddit mention of scraping.
 
-## LLM Contextual Scoring Direction
+## Analysis Modes
 
-Hardcoded dictionaries are useful for stability, but they will miss contextual signals. For example, a post saying "three people babysit this crawler every morning" may imply strong commercial pain without mentioning `captcha`, `proxy`, or `blocked`.
+The API accepts `analysisMode`:
 
-The next intelligence layer should use a hybrid model:
+- `deterministic`: no LLM calls; static query planning, deterministic scoring, clustering, and synthesis.
+- `lean`: one LLM phase for source-routed query expansion.
+- `balanced`: query expansion plus LLM judgment and score fusion. This is the default.
+- `full`: query expansion, LLM judgment, and grounded synthesis.
+
+If no LLM provider is configured, live runs automatically downgrade to `live-deterministic`. The server can also clamp usage with `LLM_MAX_CALLS_PER_RUN`. Demo mode is always deterministic because it uses fixed sample evidence.
+
+LLM and Hyperbrowser requests are explicitly timeout-bounded. Transport failures skip the repair attempt and fall back immediately because retrying a timeout does not fix malformed JSON.
+
+## LLM Contextual Judgment
+
+Hardcoded dictionaries are useful for stability, but they miss contextual signals. For example, a post saying "three people babysit this crawler every morning" may imply strong commercial pain without mentioning `captcha`, `proxy`, or `blocked`.
+
+HyperGrowth uses a hybrid model:
 
 ```txt
 heuristics = cheap, stable, explainable first-pass detector
 LLM = contextual judge and growth translator
 ```
 
-Planned flow:
+The LLM only sees a bounded mixed batch:
 
-```txt
-collect raw evidence
--> heuristic filter and score
--> dedupe
--> LLM contextual judgment on top candidates
--> score fusion
--> cluster
--> rank growth plays
--> grounded synthesis with citations
-```
+- top 12 high-score signals
+- top 6 borderline signals
+- up to 2 source-diversity fillers
 
-The LLM judgment should return strict JSON:
+The LLM judgment returns strict JSON:
 
 ```ts
 type LLMJudgment = {
   signalId: string;
+  isActionable: boolean;
   contextualRelevance: number;
   impliedPainIntensity: number;
   impliedCommercialIntent: number;
   hyperbrowserFit: number;
+  confidence: number;
   category: PainCategory;
   representativeQuote: string;
   reasoning: string[];
 };
 ```
 
-Score fusion should combine both systems instead of trusting either blindly. Heuristics stay in charge of mechanical facts like recency, source reliability, engagement, and dedupe. The LLM helps with implied pain, contextual relevance, category refinement, quote quality, and growth-channel routing.
+Score fusion combines both systems instead of trusting either blindly. Heuristics stay in charge of mechanical facts like recency, source reliability, engagement, and dedupe. The LLM helps with implied pain, contextual relevance, category refinement, quote quality, and growth-channel routing.
+
+Fusion policy:
+
+```txt
+relevance = max(heuristic.relevance, 0.90 * llm.contextualRelevance)
+painIntensity = 0.45 * heuristic + 0.55 * llm.impliedPainIntensity
+commercialIntent = 0.35 * heuristic + 0.65 * llm.impliedCommercialIntent
+hyperbrowserFit = 0.45 * heuristic + 0.55 * llm.hyperbrowserFit
+confidence = 0.60 * heuristic + 0.40 * llm.confidence
+```
+
+Non-actionable LLM judgments are capped below the normal ranking threshold instead of being silently promoted.
 
 ## Growth Use Case
 
@@ -174,7 +220,8 @@ Request:
 {
   "query": "Playwright captcha failures",
   "sources": ["hackernews", "github", "reddit"],
-  "maxResults": 12
+  "maxResults": 12,
+  "analysisMode": "balanced"
 }
 ```
 
@@ -192,14 +239,28 @@ type MineResult = {
   contentAngles: string[];
   signalScores?: SignalScore[];
   dedupeGroups?: DedupeGroup[];
+  llmJudgments?: LLMJudgment[];
   brief?: GrowthBrief;
+  metadata: MineMetadata;
 };
+```
+
+Live runs do not substitute demo data when no evidence is found. Empty live results return `mode: "live"`, empty arrays, a low-confidence brief, executed-search diagnostics, and notes explaining what happened.
+
+`metadata.timings` reports phase durations for query planning, source collection, normalization, pipeline work, and total request time. `metadata.searchDiagnostics` reports each executed source search with status, duration, and raw signal count.
+
+## Verification
+
+```bash
+npm run lint
+npm run build
+npm test
 ```
 
 ## Next Steps
 
-- Add LLM contextual judgment and score fusion on top of the deterministic scoring layer.
 - Add streaming progress updates for source fetch, extraction, and synthesis.
 - Improve source-specific parsers for cleaner titles, authors, timestamps, and engagement.
-- Add export to JSON, CSV, and Markdown.
+- Add UI controls for analysis mode, provider diagnostics, and local run history.
+- Add export to JSON and Markdown.
 - Add a polished dashboard UI and responsive visual system.

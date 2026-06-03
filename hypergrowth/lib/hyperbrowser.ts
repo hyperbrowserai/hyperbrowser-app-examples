@@ -1,5 +1,8 @@
 import { Hyperbrowser } from "@hyperbrowser/sdk";
 
+const defaultHyperbrowserTimeoutMs = 12_000;
+type HyperbrowserStealthMode = "none" | "auto" | "ultra";
+
 export function getHyperbrowserClient(): Hyperbrowser {
   const apiKey = process.env.HYPERBROWSER_API_KEY;
 
@@ -7,15 +10,24 @@ export function getHyperbrowserClient(): Hyperbrowser {
     throw new Error("Missing HYPERBROWSER_API_KEY");
   }
 
-  return new Hyperbrowser({ apiKey });
+  return new Hyperbrowser({
+    apiKey,
+    timeout: getHyperbrowserTimeoutMs(),
+  });
 }
 
 export async function fetchMarkdown(
   client: Hyperbrowser,
-  url: string
+  url: string,
+  options: { stealth?: HyperbrowserStealthMode } = {}
 ): Promise<{ markdown: string; links: unknown[] }> {
   const response = (await client.web.fetch({
     url,
+    stealth: options.stealth,
+    navigation: {
+      waitUntil: "domcontentloaded",
+      timeoutMs: getHyperbrowserTimeoutMs(),
+    },
     outputs: {
       formats: ["markdown", "links"],
     },
@@ -41,4 +53,17 @@ export async function fetchMarkdown(
           : "",
     links: Array.isArray(record.links) ? record.links : [],
   };
+}
+
+function getHyperbrowserTimeoutMs(): number {
+  const configured = Number.parseInt(
+    process.env.HYPERBROWSER_TIMEOUT_MS ?? "",
+    10
+  );
+
+  if (Number.isFinite(configured) && configured > 0) {
+    return configured;
+  }
+
+  return defaultHyperbrowserTimeoutMs;
 }

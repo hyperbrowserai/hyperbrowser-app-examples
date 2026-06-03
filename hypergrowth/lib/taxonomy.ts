@@ -78,6 +78,19 @@ export const sourceReliability: Record<SignalSource, number> = {
   reddit: 0.62,
 };
 
+export const githubEcosystemRepos = [
+  "microsoft/playwright",
+  "puppeteer/puppeteer",
+  "SeleniumHQ/selenium",
+  "browser-use/browser-use",
+  "browserbase/stagehand",
+  "langchain-ai/langchain",
+  "langchain-ai/langgraph",
+  "apify/crawlee",
+  "scrapy/scrapy",
+  "browserless/browserless",
+];
+
 export const categoryLabels: Record<PainCategory, string> = {
   anti_bot_reliability: "Anti-bot reliability",
   session_persistence: "Session persistence",

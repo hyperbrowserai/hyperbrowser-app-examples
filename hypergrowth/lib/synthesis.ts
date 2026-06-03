@@ -1,4 +1,5 @@
-import OpenAI from "openai";
+import { extractJsonObject } from "./json-utils";
+import { getLLMClient } from "./llm/provider";
 import type {
   GrowthPlay,
   MinePipelineResult,
@@ -21,16 +22,39 @@ type Synthesis = Pick<
 >;
 
 export async function synthesizeSignals(
-  input: SynthesisInput
-): Promise<Synthesis> {
-  if (!process.env.OPENAI_API_KEY) {
-    return synthesizeDeterministically(input.clusters, input.candidatePlays);
+  input: SynthesisInput,
+  options: { allowLLM: boolean } = { allowLLM: false }
+): Promise<Synthesis & { callsAttempted: number; mode: "disabled" | "used" | "fallback"; failureReason?: string }> {
+  if (!options.allowLLM) {
+    return {
+      ...synthesizeDeterministically(input.clusters, input.candidatePlays),
+      callsAttempted: 0,
+      mode: "disabled",
+    };
+  }
+
+  if (!getLLMClient()) {
+    return {
+      ...synthesizeDeterministically(input.clusters, input.candidatePlays),
+      callsAttempted: 0,
+      mode: "disabled",
+      failureReason: "No LLM provider configured for synthesis.",
+    };
   }
 
   try {
-    return await synthesizeWithOpenAI(input);
-  } catch {
-    return synthesizeDeterministically(input.clusters, input.candidatePlays);
+    return {
+      ...(await synthesizeWithLLM(input)),
+      callsAttempted: 1,
+      mode: "used",
+    };
+  } catch (error) {
+    return {
+      ...synthesizeDeterministically(input.clusters, input.candidatePlays),
+      callsAttempted: 1,
+      mode: "fallback",
+      failureReason: `LLM synthesis failed: ${error}`,
+    };
   }
 }
 
@@ -52,11 +76,13 @@ export function synthesizeDeterministically(
   };
 }
 
-async function synthesizeWithOpenAI(input: SynthesisInput): Promise<Synthesis> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+async function synthesizeWithLLM(input: SynthesisInput): Promise<Synthesis> {
+  const llm = getLLMClient();
+  if (!llm) throw new Error("No LLM provider configured.");
+
   const allowedSignalIds = new Set(input.signals.map((signal) => signal.id));
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+  const response = await llm.client.chat.completions.create({
+    model: llm.metadata.model ?? "gpt-4.1-mini",
     response_format: { type: "json_object" },
     messages: [
       {
@@ -95,7 +121,7 @@ async function synthesizeWithOpenAI(input: SynthesisInput): Promise<Synthesis> {
   const raw = response.choices[0]?.message.content;
   if (!raw) throw new Error("OpenAI returned an empty response.");
 
-  const parsed = JSON.parse(raw) as Partial<Synthesis>;
+  const parsed = extractJsonObject(raw) as Partial<Synthesis>;
   const clusters = validateClusters(parsed.clusters, input.clusters, allowedSignalIds);
   const growthPlays = validateGrowthPlays(
     parsed.growthPlays,

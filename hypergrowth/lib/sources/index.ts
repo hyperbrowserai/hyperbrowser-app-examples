@@ -1,5 +1,6 @@
 import type { Hyperbrowser } from "@hyperbrowser/sdk";
 import { fetchMarkdown } from "../hyperbrowser";
+import { githubEcosystemRepos } from "../taxonomy";
 import type { RawSignal, SignalSource } from "../types";
 
 type SourceConfig = {
@@ -39,6 +40,14 @@ export async function mineSource(
     if (algoliaSignals.length > 0) return algoliaSignals;
   }
 
+  if (source === "reddit") {
+    const redditSignals = await mineReddit(client, query, maxResults).catch(
+      () => []
+    );
+
+    if (redditSignals.length > 0) return redditSignals;
+  }
+
   return mineWithHyperbrowser(client, source, query, maxResults);
 }
 
@@ -46,9 +55,22 @@ async function mineHackerNewsAlgolia(
   query: string,
   maxResults: number
 ): Promise<RawSignal[]> {
+  const [stories, comments] = await Promise.all([
+    fetchHackerNewsHits(query, "story", Math.ceil(maxResults / 2)),
+    fetchHackerNewsHits(query, "comment", Math.ceil(maxResults / 2)),
+  ]);
+
+  return [...stories, ...comments].slice(0, maxResults);
+}
+
+async function fetchHackerNewsHits(
+  query: string,
+  tag: "story" | "comment",
+  maxResults: number
+): Promise<RawSignal[]> {
   const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(
     query
-  )}&tags=story&hitsPerPage=${maxResults}`;
+  )}&tags=${tag}&hitsPerPage=${maxResults}`;
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -58,8 +80,12 @@ async function mineHackerNewsAlgolia(
   const payload = (await response.json()) as {
     hits?: Array<{
       title?: string;
+      story_title?: string;
       story_text?: string;
+      comment_text?: string;
       url?: string;
+      story_url?: string;
+      story_id?: number;
       objectID?: string;
       author?: string;
       created_at?: string;
@@ -70,20 +96,27 @@ async function mineHackerNewsAlgolia(
 
   return (payload.hits ?? [])
     .map((hit) => {
-      const title = hit.title?.trim() || "Hacker News discussion";
+      const title =
+        hit.title?.trim() ||
+        hit.story_title?.trim() ||
+        "Hacker News discussion";
       const hnUrl = hit.objectID
         ? `https://news.ycombinator.com/item?id=${hit.objectID}`
+        : hit.story_id
+          ? `https://news.ycombinator.com/item?id=${hit.story_id}`
         : url;
-      const quote = stripHtml(hit.story_text ?? title);
+      const quote = stripHtml(hit.story_text ?? hit.comment_text ?? title);
 
       return {
         source: "hackernews" as const,
         sourceUrl: hnUrl,
-        canonicalUrl: hit.url || hnUrl,
+        canonicalUrl: hit.url || hit.story_url || hnUrl,
         title,
         quote,
         author: hit.author,
         publishedAt: hit.created_at,
+        evidenceKind: tag,
+        sourceReliabilityOverride: tag === "story" ? 0.76 : 0.7,
         engagement: {
           score: hit.points,
           comments: hit.num_comments,
@@ -94,20 +127,84 @@ async function mineHackerNewsAlgolia(
     .filter((signal) => signal.quote.length >= 20);
 }
 
+async function mineReddit(
+  client: Hyperbrowser,
+  query: string,
+  maxResults: number
+): Promise<RawSignal[]> {
+  const selectedSubreddits = [
+    "webscraping",
+    "webdev",
+    "learnpython",
+    "programming",
+    "automation",
+    "LocalLLaMA",
+    "LangChain",
+  ];
+  const signals: RawSignal[] = [];
+  const perSubredditLimit = Math.max(1, Math.ceil(maxResults / 3));
+
+  for (const subreddit of selectedSubreddits.slice(0, 3)) {
+    if (signals.length >= maxResults) break;
+
+    const searchUrl = `https://www.reddit.com/r/${subreddit}/search/?q=${encodeURIComponent(
+      query
+    )}&restrict_sr=1&sort=relevance`;
+    const mined = await mineWithHyperbrowser(
+      client,
+      "reddit",
+      query,
+      perSubredditLimit,
+      searchUrl,
+      {
+        evidenceKind: "post",
+        sourceReliabilityOverride: 0.62,
+      }
+    );
+
+    signals.push(...mined);
+  }
+
+  if (signals.length < maxResults) {
+    const globalSearchUrl = sourceConfigs.reddit.searchUrl(query);
+    signals.push(
+      ...(await mineWithHyperbrowser(
+        client,
+        "reddit",
+        query,
+        maxResults - signals.length,
+        globalSearchUrl,
+        {
+          evidenceKind: "post",
+          sourceReliabilityOverride: 0.55,
+        }
+      ))
+    );
+  }
+
+  return signals.slice(0, maxResults);
+}
+
 async function mineWithHyperbrowser(
   client: Hyperbrowser,
   source: SignalSource,
   query: string,
-  maxResults: number
+  maxResults: number,
+  explicitSearchUrl?: string,
+  metadata: Partial<RawSignal> = {}
 ): Promise<RawSignal[]> {
   const config = sourceConfigs[source];
-  const searchUrl = config.searchUrl(query);
-  const { markdown, links } = await fetchMarkdown(client, searchUrl);
+  const searchUrl = explicitSearchUrl ?? config.searchUrl(query);
+  const { markdown, links } = await fetchMarkdown(client, searchUrl, {
+    stealth: source === "reddit" ? "auto" : undefined,
+  });
   const candidates = extractCandidateLines(markdown, query);
   const normalizedLinks = normalizeLinks(links, searchUrl);
 
   return candidates.slice(0, maxResults).map((candidate, index) => {
     const url = normalizedLinks[index] ?? searchUrl;
+    const repo = source === "github" ? detectGithubRepo(url) : undefined;
+    const ecosystemBoost = repo ? isEcosystemRepo(repo) : undefined;
 
     return {
       source,
@@ -115,6 +212,10 @@ async function mineWithHyperbrowser(
       canonicalUrl: url,
       title: extractTitle(candidate, config.label),
       quote: candidate,
+      evidenceKind: source === "github" ? "issue" : "search-result",
+      repo,
+      ecosystemBoost,
+      ...metadata,
     };
   });
 }
@@ -181,6 +282,19 @@ function stripHtml(value: string): string {
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function detectGithubRepo(url: string): string | undefined {
+  const match = url.match(/github\.com\/([^/\s]+\/[^/\s?#]+)/i);
+  return match?.[1];
+}
+
+function isEcosystemRepo(repo: string): boolean {
+  const normalizedRepo = repo.toLowerCase();
+
+  return githubEcosystemRepos.some(
+    (ecosystemRepo) => ecosystemRepo.toLowerCase() === normalizedRepo
+  );
 }
 
 function dedupeLines(line: string, index: number, lines: string[]): boolean {

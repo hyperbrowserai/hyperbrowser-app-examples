@@ -33,11 +33,15 @@ export function scoreSignal(query: string, signal: PainSignal): SignalScore {
     0.18 + countMatches(text, painTerms) * 0.14 + urgencyBoost(signal.urgency)
   );
   const hyperbrowserFit = clamp01(
-    0.12 + countMatches(text, hyperbrowserFitTerms) * 0.105
+    0.12 +
+      countMatches(text, hyperbrowserFitTerms) * 0.105 +
+      (signal.ecosystemBoost ? 0.08 : 0)
   );
   const commercialIntent = clamp01(0.1 + countMatches(text, commercialTerms) * 0.13);
   const recency = scoreRecency(signal.publishedAt);
-  const reliability = sourceReliability[signal.source];
+  const reliability = clamp01(
+    signal.sourceReliabilityOverride ?? sourceReliability[signal.source]
+  );
   const confidence = clamp01(
     0.34 +
       (signal.quote.length > 90 ? 0.18 : 0.08) +
@@ -131,6 +135,10 @@ function buildReasons({
 
   if (signal.source === "github") {
     reasons.push("GitHub issue signal tends to represent concrete implementation pain");
+  }
+
+  if (signal.ecosystemBoost) {
+    reasons.push("Comes from a browser automation or agent ecosystem repository");
   }
 
   return reasons;

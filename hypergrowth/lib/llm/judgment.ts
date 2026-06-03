@@ -1,0 +1,225 @@
+import { z } from "zod";
+import { extractJsonObject } from "../json-utils";
+import { isLLMTransportError } from "./errors";
+import { getLLMClient } from "./provider";
+import type { LLMJudgment, PainSignal, SignalScore } from "../types";
+
+const painCategories = [
+  "anti_bot_reliability",
+  "session_persistence",
+  "browser_infra_cost",
+  "dynamic_js_extraction",
+  "agent_navigation_failure",
+  "proxy_retry_complexity",
+  "data_quality_extraction",
+  "workflow_maintenance",
+  "developer_workflow_friction",
+] as const;
+
+const judgmentSchema = z.object({
+  signalId: z.string(),
+  isActionable: z.boolean(),
+  contextualRelevance: z.number(),
+  impliedPainIntensity: z.number(),
+  impliedCommercialIntent: z.number(),
+  hyperbrowserFit: z.number(),
+  confidence: z.number(),
+  category: z.enum(painCategories),
+  representativeQuote: z.string(),
+  reasoning: z.array(z.string()).default([]),
+});
+
+const responseSchema = z.object({
+  judgments: z.array(judgmentSchema),
+});
+
+type JudgeSignalsResult = {
+  judgments: LLMJudgment[];
+  callsAttempted: number;
+  mode: "disabled" | "used" | "fallback" | "partial";
+  failureReason?: string;
+};
+
+export async function judgeSignals({
+  query,
+  signals,
+  signalScores,
+}: {
+  query: string;
+  signals: PainSignal[];
+  signalScores: SignalScore[];
+}): Promise<JudgeSignalsResult> {
+  if (signals.length === 0) {
+    return { judgments: [], callsAttempted: 0, mode: "disabled" };
+  }
+
+  const llm = getLLMClient();
+  if (!llm) {
+    return {
+      judgments: [],
+      callsAttempted: 0,
+      mode: "disabled",
+      failureReason: "No LLM provider configured for judgment.",
+    };
+  }
+
+  let callsAttempted = 0;
+
+  try {
+    callsAttempted += 1;
+    const judgments = await requestJudgments({ query, signals, signalScores });
+    return {
+      judgments,
+      callsAttempted,
+      mode: judgments.length === signals.length ? "used" : "partial",
+    };
+  } catch (firstError) {
+    if (isLLMTransportError(firstError)) {
+      return {
+        judgments: [],
+        callsAttempted,
+        mode: "fallback",
+        failureReason: `LLM judgment transport failed: ${firstError}`,
+      };
+    }
+
+    try {
+      callsAttempted += 1;
+      const judgments = await requestJudgments({
+        query,
+        signals,
+        signalScores,
+        repairInput: String(firstError),
+      });
+      return {
+        judgments,
+        callsAttempted,
+        mode: judgments.length === signals.length ? "used" : "partial",
+      };
+    } catch (repairError) {
+      return {
+        judgments: [],
+        callsAttempted,
+        mode: "fallback",
+        failureReason: `LLM judgment failed after repair: ${repairError}`,
+      };
+    }
+  }
+}
+
+async function requestJudgments({
+  query,
+  signals,
+  signalScores,
+  repairInput,
+}: {
+  query: string;
+  signals: PainSignal[];
+  signalScores: SignalScore[];
+  repairInput?: string;
+}): Promise<LLMJudgment[]> {
+  const llm = getLLMClient();
+  if (!llm) throw new Error("No LLM provider configured.");
+
+  const response = await llm.client.chat.completions.create({
+    model: llm.metadata.model ?? "gpt-4.1-mini",
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You judge public developer pain evidence for HyperGrowth, a Hyperbrowser-specific growth signal miner. Use only supplied evidence. Return strict JSON only.",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          task: repairInput
+            ? "Repair the previous judgment failure and return valid JSON."
+            : "Judge whether these public evidence items are actionable growth signals.",
+          previousFailure: repairInput,
+          query,
+          constraints: [
+            "Every signalId must match one provided signal.",
+            "All numeric scores must be between 0 and 1.",
+            "representativeQuote must be grounded in the original title or quote.",
+            "Do not invent companies, people, URLs, or private intent.",
+            "Use isActionable=false for generic, ambiguous, or off-topic evidence.",
+          ],
+          categories: painCategories,
+          shape: {
+            judgments: [
+              {
+                signalId: "string",
+                isActionable: true,
+                contextualRelevance: 0.5,
+                impliedPainIntensity: 0.5,
+                impliedCommercialIntent: 0.5,
+                hyperbrowserFit: 0.5,
+                confidence: 0.5,
+                category: "developer_workflow_friction",
+                representativeQuote: "string",
+                reasoning: ["string"],
+              },
+            ],
+          },
+          signals,
+          signalScores,
+        }),
+      },
+    ],
+  });
+
+  const content = response.choices[0]?.message.content;
+  if (!content) throw new Error("LLM returned empty judgments.");
+
+  const parsed = responseSchema.parse(extractJsonObject(content));
+  return validateJudgments(parsed.judgments, signals);
+}
+
+function validateJudgments(
+  judgments: z.infer<typeof judgmentSchema>[],
+  signals: PainSignal[]
+): LLMJudgment[] {
+  const signalById = new Map(signals.map((signal) => [signal.id, signal]));
+  const valid: LLMJudgment[] = [];
+
+  for (const judgment of judgments) {
+    const signal = signalById.get(judgment.signalId);
+    if (!signal) continue;
+
+    valid.push({
+      signalId: judgment.signalId,
+      isActionable: judgment.isActionable,
+      contextualRelevance: clampJudgment(judgment.contextualRelevance),
+      impliedPainIntensity: clampJudgment(judgment.impliedPainIntensity),
+      impliedCommercialIntent: clampJudgment(judgment.impliedCommercialIntent),
+      hyperbrowserFit: clampJudgment(judgment.hyperbrowserFit),
+      confidence: clampJudgment(judgment.confidence),
+      category: judgment.category,
+      representativeQuote: groundedQuote(judgment.representativeQuote, signal),
+      reasoning: judgment.reasoning
+        .filter((reason) => typeof reason === "string")
+        .map((reason) => reason.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .slice(0, 3),
+    });
+  }
+
+  return valid;
+}
+
+function groundedQuote(quote: string, signal: PainSignal): string {
+  const normalized = quote.replace(/\s+/g, " ").trim();
+  const haystack = `${signal.title} ${signal.quote}`.replace(/\s+/g, " ");
+
+  if (normalized.length >= 20 && haystack.includes(normalized)) {
+    return normalized;
+  }
+
+  return signal.quote;
+}
+
+function clampJudgment(value: number): number {
+  if (Number.isNaN(value)) return 0;
+  return Math.max(0, Math.min(1, Number(value.toFixed(3))));
+}
