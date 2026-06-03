@@ -1,23 +1,30 @@
 import {
   AlertTriangle,
-  ArrowRight,
-  ArrowUpRight,
   BarChart3,
+  Brain,
   Braces,
+  CheckCircle2,
   ChevronDown,
   Clock3,
+  ExternalLink,
   FileText,
   Layers3,
   Megaphone,
-  MessageSquareQuote,
+  Network,
   Quote,
   RadioTower,
+  Route,
+  Search,
   ShieldCheck,
   Target,
+  Timer,
+  TriangleAlert,
   Zap,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { SourceIcon } from "@/components/SourceIcon";
 import type {
+  AnalysisMode,
   GrowthChannel,
   MineResult,
   PainCluster,
@@ -30,15 +37,30 @@ import type {
 type ResultsDashboardProps = {
   result: MineResult;
   isLoading?: boolean;
+  activeRun?: {
+    query: string;
+    sources: SignalSource[];
+    analysisMode: AnalysisMode;
+    maxResults: number;
+    includeBroadWeb: boolean;
+    redditTargets: string[];
+  };
 };
 
-/* ─── Color Mappings ─── */
+/* Color mappings */
 
 const sourceLabels: Record<SignalSource, string> = {
   hackernews: "HN",
   github: "GitHub",
   reddit: "Reddit",
-  hyperbrowser: "Web",
+  hyperbrowser: "Hyperbrowser",
+};
+
+const sourceLongLabels: Record<SignalSource, string> = {
+  hackernews: "HN Algolia API",
+  github: "GitHub Issues API",
+  reddit: "Reddit target",
+  hyperbrowser: "Hyperbrowser Search",
 };
 
 const sourceTextClass: Record<SignalSource, string> = {
@@ -82,11 +104,12 @@ const urgencyBadgeClass: Record<Urgency, string> = {
   low: "border-urgency-low/40 bg-urgency-low/15 text-urgency-low",
 };
 
-/* ─── Main Dashboard ─── */
+/* Main Dashboard */
 
 export function ResultsDashboard({
   result,
   isLoading = false,
+  activeRun,
 }: ResultsDashboardProps) {
   const brief = result.brief;
   const scoreBySignalId = new Map(
@@ -104,7 +127,7 @@ export function ResultsDashboard({
 
   return (
     <section className={`space-y-3 ${isLoading ? "opacity-70" : ""}`}>
-      {/* ── Metrics Strip ── */}
+      {/* Metrics Strip */}
       <div className="flex items-stretch overflow-x-auto rounded-lg border border-line bg-panel/70 backdrop-blur-xl">
         <MetricCell
           icon={<RadioTower size={13} className="text-accent" />}
@@ -181,7 +204,9 @@ export function ResultsDashboard({
         />
       </div>
 
-      {/* ── Three-Column Content Grid ── */}
+      <RunTrace result={result} isLoading={isLoading} activeRun={activeRun} />
+
+      {/* Three-Column Content Grid */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)]">
         {/* Column 1: Growth Brief */}
         <Panel
@@ -212,12 +237,6 @@ export function ResultsDashboard({
                 {brief?.recommendedNextStep ??
                   "Run a live query to generate a recommended next step."}
               </p>
-              <button
-                type="button"
-                className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-accent transition hover:underline"
-              >
-                View full brief <ArrowRight size={11} />
-              </button>
             </div>
 
             <div className="flex flex-wrap gap-1.5">
@@ -249,9 +268,9 @@ export function ResultsDashboard({
           accentColor="border-t-accent-orange"
           headerRight={
             result.growthPlays.length > 0 ? (
-              <span className="text-[11px] font-semibold text-accent-orange">
-                View all ({result.growthPlays.length}){" "}
-                <ArrowRight size={10} className="inline" />
+              <span className="text-[11px] font-semibold text-muted">
+                Showing {Math.min(result.growthPlays.length, 6)} of{" "}
+                {result.growthPlays.length}
               </span>
             ) : undefined
           }
@@ -295,9 +314,9 @@ export function ResultsDashboard({
           accentColor="border-t-accent-purple"
           headerRight={
             result.clusters.length > 0 ? (
-              <span className="text-[11px] font-semibold text-accent-purple">
-                View all ({result.clusters.length}){" "}
-                <ArrowRight size={10} className="inline" />
+              <span className="text-[11px] font-semibold text-muted">
+                Showing {Math.min(result.clusters.length, 5)} of{" "}
+                {result.clusters.length}
               </span>
             ) : undefined
           }
@@ -326,16 +345,297 @@ export function ResultsDashboard({
         </Panel>
       </div>
 
-      {/* ── Evidence Table ── */}
+      {/* Evidence Table */}
       <EvidenceTable signals={result.signals} scoreMap={scoreBySignalId} />
 
-      {/* ── Diagnostics Console ── */}
+      {/* Diagnostics Console */}
       <Diagnostics result={result} />
     </section>
   );
 }
 
-/* ─── Evidence Table ─── */
+function RunTrace({
+  result,
+  isLoading,
+  activeRun,
+}: {
+  result: MineResult;
+  isLoading: boolean;
+  activeRun?: ResultsDashboardProps["activeRun"];
+}) {
+  const plan = result.metadata.queryPlan;
+  const searches = result.metadata.searchDiagnostics ?? [];
+  const executedSearches = result.metadata.executedSearches ?? [];
+  const visibleQueries = plan
+    ? Object.entries(plan.sourceQueries).flatMap(([source, queries]) =>
+        queries.map((query) => ({
+          source: source as SignalSource,
+          query,
+        }))
+      )
+    : executedSearches.map((search) => ({
+        source: search.source,
+        query: search.query,
+      }));
+  const llm = result.metadata.llm;
+
+  if (isLoading) {
+    return (
+      <Panel
+        icon={<Route size={15} className="text-accent-blue" />}
+        title="Run Trace"
+        accentColor="border-t-accent-blue"
+        headerRight={
+          <span className="text-[11px] font-semibold text-accent-blue">
+            Blocking v1 run
+          </span>
+        }
+      >
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
+          <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
+              Active request
+            </p>
+            <p className="mt-1 line-clamp-2 text-[12px] font-semibold leading-5 text-foreground">
+              {activeRun?.query ?? result.query}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(activeRun?.sources ?? result.metadata.searchedSources).map(
+                (source) => (
+                  <span
+                    key={source}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceBadgeClass[source]}`}
+                  >
+                    <SourceIcon source={source} size={12} />
+                    {sourceLongLabels[source]}
+                  </span>
+                )
+              )}
+            </div>
+            {activeRun?.redditTargets.length ? (
+              <p className="mt-2 text-[10px] leading-4 text-muted">
+                Reddit targets via Hyperbrowser:{" "}
+                {activeRun.redditTargets.map((target) => `r/${target}`).join(", ")}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {loadingPhases.map((phase, index) => (
+              <div
+                key={phase.label}
+                className="rounded-md border border-line/50 bg-black/20 px-3 py-2"
+              >
+                <span className="flex items-center gap-2 text-[11px] font-bold text-foreground">
+                  {index === 0 ? (
+                    <span className="size-2 rounded-full bg-accent animate-pulse" />
+                  ) : (
+                    <span className="size-2 rounded-full bg-muted/50" />
+                  )}
+                  {phase.label}
+                </span>
+                <p className="mt-1 text-[10px] leading-4 text-muted">
+                  {phase.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Panel>
+    );
+  }
+
+  if (!plan && !searches.length && !executedSearches.length) {
+    return null;
+  }
+
+  return (
+    <Panel
+      icon={<Route size={15} className="text-accent-blue" />}
+      title="Run Trace"
+      accentColor="border-t-accent-blue"
+      headerRight={
+        <span className="text-[11px] font-semibold text-muted">
+          Final metadata
+        </span>
+      }
+    >
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,0.95fr)]">
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+            <Search size={12} className="text-accent-blue" />
+            Search Plan
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {plan ? (
+              <span className="rounded-full border border-accent-blue/30 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-semibold text-accent-blue">
+                {formatStrategy(plan.strategy)}
+              </span>
+            ) : null}
+            {visibleQueries.slice(0, 8).map((item) => (
+              <span
+                key={`${item.source}-${item.query}`}
+                className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceBadgeClass[item.source]}`}
+                title={item.query}
+              >
+                <SourceIcon source={item.source} size={11} />
+                <span className="max-w-[220px] truncate">{item.query}</span>
+              </span>
+            ))}
+          </div>
+          {plan?.rationale.length ? (
+            <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-muted">
+              {plan.rationale.join(" ")}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+            <Network size={12} className="text-accent-orange" />
+            Source Work
+          </div>
+          <div className="mt-1.5 space-y-1">
+            {searches.length ? (
+              searches.slice(0, 5).map((search) => (
+                <div
+                  key={`${search.source}-${search.query}`}
+                  className="flex items-center justify-between gap-2 border-b border-line/40 py-1 last:border-b-0"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <SourceIcon source={search.source} size={12} />
+                    <span
+                      className={`truncate text-[11px] font-semibold ${sourceTextClass[search.source]}`}
+                    >
+                      {sourceLongLabels[search.source]}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[10px] text-muted">
+                    {formatCandidateCounts(search)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="py-2 text-[11px] text-muted">
+                No source diagnostics were returned.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+            <Brain size={12} className="text-accent-purple" />
+            Intelligence
+          </div>
+          <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+            <TraceMode label="Queries" value={llm.queryExpansionMode} />
+            <TraceMode label="Triage" value={llm.candidateTriageMode} />
+            <TraceMode label="Extract" value={llm.evidenceExtractionMode} />
+            <TraceMode label="Gaps" value={llm.gapExpansionMode} />
+            <TraceMode label="Judge" value={llm.judgmentMode} />
+            <TraceMode label="Brief" value={llm.synthesisMode} />
+          </div>
+          <p className="mt-2 flex items-center gap-1.5 text-[10px] text-muted">
+            <Timer size={11} />
+            {formatTimingShort(result.metadata.timings)} total,{" "}
+            {llm.callsAttempted} LLM calls attempted
+          </p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+const loadingPhases = [
+  {
+    label: "Planning search",
+    detail: "Generating source-specific queries and Hyperbrowser targets.",
+  },
+  {
+    label: "Searching sources",
+    detail: "Calling GitHub, HN, and Hyperbrowser Search where enabled.",
+  },
+  {
+    label: "Fetching evidence",
+    detail: "Enriching selected canonical URLs with Hyperbrowser Fetch.",
+  },
+  {
+    label: "Filtering weak evidence",
+    detail: "Rejecting login walls, thin snippets, and weak overlap.",
+  },
+  {
+    label: "Running LLM review",
+    detail: "Triage, extraction, judgment, and gap planning when configured.",
+  },
+  {
+    label: "Drafting growth plays",
+    detail: "Clustering pain signals and preparing the growth brief.",
+  },
+];
+
+function TraceMode({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  const mode = value ?? "disabled";
+  const modeClass =
+    mode === "used"
+      ? "text-success"
+      : mode === "fallback" || mode === "partial"
+        ? "text-warning"
+        : "text-muted";
+
+  return (
+    <span className="flex items-center justify-between gap-2 border-b border-line/30 py-0.5 last:border-b-0">
+      <span className="text-muted">{label}</span>
+      <span className={`font-mono font-semibold ${modeClass}`}>{mode}</span>
+    </span>
+  );
+}
+
+function formatStrategy(strategy: string): string {
+  return strategy.replaceAll("-", " ");
+}
+
+function formatCandidateCounts(search: {
+  status: "success" | "error";
+  rawSignals: number;
+  acceptedCandidates?: number;
+  rejectedCandidates?: number;
+}) {
+  if (search.status === "error") {
+    return "error";
+  }
+
+  const accepted = search.acceptedCandidates;
+  const rejected = search.rejectedCandidates;
+  if (typeof accepted === "number" || typeof rejected === "number") {
+    return `${search.rawSignals} raw / ${accepted ?? 0} accepted / ${rejected ?? 0} rejected`;
+  }
+
+  return `${search.rawSignals} raw`;
+}
+
+function formatSearchStatus(search: {
+  status: "success" | "error";
+  acceptedCandidates?: number;
+}) {
+  if (search.status === "error") {
+    return "failed";
+  }
+
+  if (search.acceptedCandidates === 0) {
+    return "0 accepted";
+  }
+
+  return "completed";
+}
+
+/* Evidence Table */
 
 function EvidenceTable({
   signals,
@@ -356,8 +656,7 @@ function EvidenceTable({
         </span>
         {signals.length > 0 ? (
           <span className="text-[11px] font-semibold text-accent-blue">
-            View all evidence ({signals.length}){" "}
-            <ArrowRight size={10} className="inline" />
+            Showing first {Math.min(signals.length, 6)} of {signals.length}
           </span>
         ) : null}
       </div>
@@ -422,8 +721,8 @@ function EvidenceRow({
       <td className="w-1 py-3 pl-0 pr-0" />
 
       {/* Quote text */}
-      <td className="max-w-[420px] px-3 py-3 align-top">
-        <p className="line-clamp-2 text-[12px] leading-5 text-foreground/90">
+      <td className="max-w-[520px] px-3 py-3.5 align-top">
+        <p className="line-clamp-3 text-[12px] leading-5 text-foreground/90">
           &ldquo;{signal.quote}&rdquo;
         </p>
       </td>
@@ -431,9 +730,7 @@ function EvidenceRow({
       {/* Source + date */}
       <td className="whitespace-nowrap px-3 py-3 align-top">
         <span className="flex items-center gap-1.5">
-          <span
-            className={`size-2.5 rounded-full ${sourceDotClass[signal.source]}`}
-          />
+          <SourceIcon source={signal.source} size={14} />
           <span
             className={`text-[12px] font-bold ${sourceTextClass[signal.source]}`}
           >
@@ -469,14 +766,14 @@ function EvidenceRow({
             {score.total.toFixed(2)}
           </span>
         ) : (
-          <span className="text-[11px] text-muted">—</span>
+          <span className="text-[11px] text-muted">-</span>
         )}
       </td>
 
       {/* Rationale */}
-      <td className="max-w-[220px] py-3 pl-3 pr-4 align-top">
+      <td className="max-w-[320px] py-3.5 pl-3 pr-4 align-top">
         {score?.reasons.length ? (
-          <p className="line-clamp-2 text-[11px] leading-4 text-muted">
+          <p className="line-clamp-3 text-[11px] leading-4 text-muted">
             {score.reasons.join(". ")}
           </p>
         ) : (
@@ -486,7 +783,7 @@ function EvidenceRow({
             target="_blank"
             rel="noreferrer"
           >
-            Open <ArrowUpRight size={10} />
+            Open <ExternalLink size={10} />
           </a>
         )}
       </td>
@@ -494,7 +791,7 @@ function EvidenceRow({
   );
 }
 
-/* ─── Cluster Row ─── */
+/* Cluster Row */
 
 function ClusterRow({
   cluster,
@@ -540,11 +837,16 @@ function ClusterRow({
   );
 }
 
-/* ─── Diagnostics Console ─── */
+/* Diagnostics Console */
 
 function Diagnostics({ result }: { result: MineResult }) {
   const timings = result.metadata.timings ?? [];
   const searches = result.metadata.searchDiagnostics ?? [];
+  const llmStatus = result.metadata.llm.failureReason
+    ? "issue"
+    : result.metadata.llm.callsAttempted > 0
+      ? "used"
+      : "not used";
   const warnings = [
     ...result.metadata.errors,
     ...result.metadata.notes.filter(
@@ -566,7 +868,7 @@ function Diagnostics({ result }: { result: MineResult }) {
             <span className="text-[10px] text-muted">
               Total:{" "}
               <span className="font-mono font-bold text-accent-blue">
-                {timings.find((t) => t.name === "total")?.durationMs ?? "—"}ms
+                {timings.find((t) => t.name === "total")?.durationMs ?? "-"}ms
               </span>
             </span>
           )}
@@ -617,14 +919,32 @@ function Diagnostics({ result }: { result: MineResult }) {
             icon={<ShieldCheck size={11} className="text-accent-purple" />}
             titleRight={
               <span className="flex items-center gap-1 text-[9px]">
-                <span className="size-2 rounded-full bg-success animate-pulse" />
-                <span className="font-bold text-success">Healthy</span>
+                <span
+                  className={`size-2 rounded-full ${
+                    llmStatus === "issue"
+                      ? "bg-danger"
+                      : llmStatus === "used"
+                        ? "bg-success"
+                        : "bg-muted"
+                  }`}
+                />
+                <span
+                  className={`font-bold ${
+                    llmStatus === "issue"
+                      ? "text-danger"
+                      : llmStatus === "used"
+                        ? "text-success"
+                        : "text-muted"
+                  }`}
+                >
+                  {llmStatus}
+                </span>
               </span>
             }
           >
             <DiagnosticLine
               label="Model"
-              value={result.metadata.llm.model ?? "—"}
+              value={result.metadata.llm.model ?? "-"}
               valueClass="text-accent-purple"
             />
             <DiagnosticLine
@@ -648,12 +968,10 @@ function Diagnostics({ result }: { result: MineResult }) {
                   key={`${s.source}-${s.query}`}
                   className="flex items-center justify-between gap-2 border-b border-line/40 py-1 last:border-b-0"
                 >
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className={`size-2 rounded-full ${sourceDotClass[s.source]}`}
-                    />
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <SourceIcon source={s.source} size={12} />
                     <span className={`font-semibold ${sourceTextClass[s.source]}`}>
-                      {sourceLabels[s.source]}
+                      {sourceLongLabels[s.source]}
                     </span>
                     <span className="text-muted">{s.rawSignals}</span>
                   </span>
@@ -662,7 +980,7 @@ function Diagnostics({ result }: { result: MineResult }) {
                       className={`size-2 rounded-full ${s.status === "success" ? "bg-success" : "bg-danger"}`}
                     />
                     <span className={s.status === "success" ? "text-success" : "text-danger"}>
-                      {s.status === "success" ? "Live" : "Error"}
+                      {formatSearchStatus(s)}
                     </span>
                     <span className="text-muted">{s.durationMs}ms</span>
                   </span>
@@ -689,13 +1007,15 @@ function Diagnostics({ result }: { result: MineResult }) {
               warnings.slice(0, 3).map((w) => (
                 <p
                   key={w}
-                  className="border-b border-line/40 py-1 text-[10px] leading-4 text-warning/80 last:border-b-0"
+                  className="flex gap-1.5 border-b border-line/40 py-1 text-[10px] leading-4 text-warning/80 last:border-b-0"
                 >
-                  ⚠ {w}
+                  <TriangleAlert size={10} className="mt-0.5 shrink-0" /> {w}
                 </p>
               ))
             ) : (
-              <p className="text-success">✓ No warnings</p>
+              <p className="flex items-center gap-1 text-success">
+                <CheckCircle2 size={11} /> No warnings
+              </p>
             )}
           </DiagnosticBlock>
 
@@ -718,7 +1038,7 @@ function Diagnostics({ result }: { result: MineResult }) {
                       className={`size-2 rounded-full ${s.status === "success" ? "bg-success animate-pulse" : "bg-danger"}`}
                     />
                     <span className={s.status === "success" ? "font-bold text-success" : "text-danger"}>
-                      {s.status === "success" ? "Live" : "Down"}
+                      {s.status === "success" ? "completed" : "failed"}
                     </span>
                   </span>
                 </div>
@@ -741,7 +1061,7 @@ function Diagnostics({ result }: { result: MineResult }) {
   );
 }
 
-/* ─── Shared Small Components ─── */
+/* Shared Small Components */
 
 function MetricCell({
   icon,
@@ -858,14 +1178,14 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-/* ─── Helpers ─── */
+/* Helpers */
 
 function formatTimingShort(
   timings?: { name: string; durationMs: number }[]
 ): string {
-  if (!timings?.length) return "—";
+  if (!timings?.length) return "-";
   const total = timings.find((t) => t.name === "total");
-  if (!total) return "—";
+  if (!total) return "-";
   return total.durationMs < 1000
     ? `${total.durationMs}ms`
     : `${(total.durationMs / 1000).toFixed(1)}s`;

@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { SourceIcon } from "@/components/SourceIcon";
 import type { SignalSource } from "@/lib/types";
 
 const sources: {
@@ -27,7 +28,7 @@ const sources: {
   },
   {
     id: "hyperbrowser",
-    label: "Web",
+    label: "Hyperbrowser",
     dotColor: "bg-source-web",
     selectedBorder: "border-source-web/60",
     selectedBg: "bg-source-web/12",
@@ -67,9 +68,9 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
                 : "border-line bg-white/[0.03] text-muted hover:border-line hover:text-foreground"
             }`}
           >
-            <span
-              className={`size-2.5 rounded-full ${source.dotColor} ${selected ? "shadow-[0_0_6px_currentColor]" : "opacity-40"}`}
-            />
+            <span className="grid size-5 place-items-center rounded bg-white/[0.04]">
+              <SourceIcon source={source.id} size={14} />
+            </span>
             {source.label}
             {selected ? (
               <Check size={12} strokeWidth={3} />
