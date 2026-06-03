@@ -76,6 +76,7 @@ export const sourceReliability: Record<SignalSource, number> = {
   github: 0.86,
   hackernews: 0.76,
   reddit: 0.62,
+  hyperbrowser: 0.72,
 };
 
 export const githubEcosystemRepos = [

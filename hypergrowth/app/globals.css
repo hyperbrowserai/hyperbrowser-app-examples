@@ -1,29 +1,73 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
 @import "tailwindcss";
 
 :root {
-  --background: #f7f8f3;
-  --foreground: #101410;
-  --muted: #657064;
-  --panel: #ffffff;
-  --line: #dde4d7;
-  --accent: #d7ff3f;
+  --background: #050a0e;
+  --foreground: #eaf2f0;
+  --muted: #7b8f8a;
+  --panel: rgba(8, 16, 20, 0.78);
+  --line: rgba(120, 180, 160, 0.14);
+  --accent: #7cffb2;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-panel: var(--panel);
-  --color-line: var(--line);
-  --color-accent: var(--accent);
-  --font-sans: Arial, Helvetica, sans-serif;
+  --color-background: #050a0e;
+  --color-foreground: #eaf2f0;
+  --color-muted: #7b8f8a;
+  --color-panel: rgba(8, 16, 20, 0.78);
+  --color-line: rgba(120, 180, 160, 0.14);
+  --color-accent: #7cffb2;
+  --color-accent-blue: #5eafff;
+  --color-accent-orange: #ffb05e;
+  --color-accent-purple: #b18cff;
+  --color-accent-red: #ff7a90;
+  --color-warning: #ffd166;
+  --color-danger: #ff7a90;
+  --color-success: #4ade80;
+  --color-info: #5eafff;
+  --color-source-hn: #ff6600;
+  --color-source-github: #8b5cf6;
+  --color-source-web: #5eafff;
+  --color-source-reddit: #ff4500;
+  --color-urgency-high: #ff7a90;
+  --color-urgency-med: #ffb05e;
+  --color-urgency-low: #4ade80;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(94, 175, 255, 0.07), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 0%, rgba(124, 255, 178, 0.06), transparent 50%),
+    radial-gradient(ellipse 50% 30% at 50% 100%, rgba(177, 140, 255, 0.04), transparent 50%),
+    var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  min-width: 0;
+}
+
+body::before {
+  pointer-events: none;
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black, transparent 70%);
 }
 
 button,
@@ -31,4 +75,24 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+::selection {
+  background: rgba(124, 255, 178, 0.24);
+}
+
+/* Scrollbar styling for dense panels */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 180, 160, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 180, 160, 0.35);
 }

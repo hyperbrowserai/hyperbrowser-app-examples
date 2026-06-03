@@ -1,23 +1,37 @@
-"use client";
-
 import { Check } from "lucide-react";
 import type { SignalSource } from "@/lib/types";
 
-const sources: { id: SignalSource; label: string; description: string }[] = [
+const sources: {
+  id: SignalSource;
+  label: string;
+  dotColor: string;
+  selectedBorder: string;
+  selectedBg: string;
+  selectedText: string;
+}[] = [
   {
     id: "hackernews",
     label: "Hacker News",
-    description: "Developer infra and launch discussion",
+    dotColor: "bg-source-hn",
+    selectedBorder: "border-source-hn/60",
+    selectedBg: "bg-source-hn/12",
+    selectedText: "text-source-hn",
   },
   {
     id: "github",
-    label: "GitHub Issues",
-    description: "Concrete failures and workflow pain",
+    label: "GitHub",
+    dotColor: "bg-source-github",
+    selectedBorder: "border-source-github/60",
+    selectedBg: "bg-source-github/12",
+    selectedText: "text-source-github",
   },
   {
-    id: "reddit",
-    label: "Reddit",
-    description: "Messy community demand signals",
+    id: "hyperbrowser",
+    label: "Web",
+    dotColor: "bg-source-web",
+    selectedBorder: "border-source-web/60",
+    selectedBg: "bg-source-web/12",
+    selectedText: "text-source-web",
   },
 ];
 
@@ -38,7 +52,7 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-3">
+    <div className="flex items-center gap-2">
       {sources.map((source) => {
         const selected = value.includes(source.id);
 
@@ -47,31 +61,19 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
             key={source.id}
             type="button"
             onClick={() => toggle(source.id)}
-            className={`rounded-lg border p-4 text-left transition ${
+            className={`inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${
               selected
-                ? "border-foreground bg-foreground text-white"
-                : "border-line bg-panel text-foreground hover:border-foreground"
+                ? `${source.selectedBorder} ${source.selectedBg} ${source.selectedText}`
+                : "border-line bg-white/[0.03] text-muted hover:border-line hover:text-foreground"
             }`}
           >
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold">{source.label}</span>
-              <span
-                className={`grid size-5 place-items-center rounded-full border ${
-                  selected
-                    ? "border-accent text-accent"
-                    : "border-line text-transparent"
-                }`}
-              >
-                <Check size={13} strokeWidth={3} />
-              </span>
-            </div>
-            <p
-              className={`mt-2 text-xs leading-5 ${
-                selected ? "text-zinc-300" : "text-muted"
-              }`}
-            >
-              {source.description}
-            </p>
+            <span
+              className={`size-2.5 rounded-full ${source.dotColor} ${selected ? "shadow-[0_0_6px_currentColor]" : "opacity-40"}`}
+            />
+            {source.label}
+            {selected ? (
+              <Check size={12} strokeWidth={3} />
+            ) : null}
           </button>
         );
       })}

@@ -7,7 +7,7 @@ import type {
 
 export const defaultSourceBudgetPolicy: SourceBudgetPolicy = {
   maxSourceSearchesPerRun: 8,
-  maxQueriesPerSource: 3,
+  maxQueriesPerSource: 4,
   maxRawSignalsPerSearch: 8,
   maxRawSignalsTotal: 60,
   requestTimeoutMs: 12_000,
@@ -41,6 +41,24 @@ export function planExecutedSearches({
   );
 
   while (searches.length < policy.maxSourceSearchesPerRun) {
+    const hyperbrowserQueue = queues.get("hyperbrowser");
+    if (
+      selectedSources.includes("hyperbrowser") &&
+      hyperbrowserQueue?.length &&
+      (counts.get("hyperbrowser") ?? 0) < policy.maxQueriesPerSource
+    ) {
+      const next = hyperbrowserQueue.shift();
+      if (next) {
+        searches.push({
+          source: "hyperbrowser",
+          query: next,
+          reason: "expanded",
+        });
+        counts.set("hyperbrowser", (counts.get("hyperbrowser") ?? 0) + 1);
+        continue;
+      }
+    }
+
     let added = false;
 
     for (const source of selectedSources) {
@@ -62,7 +80,7 @@ export function planExecutedSearches({
 }
 
 function limitSingleSessionSources(searches: ExecutedSearch[]): ExecutedSearch[] {
-  const seenReddit = new Set<string>();
+  const seenReddit = new Set<SignalSource>();
 
   return searches.filter((search) => {
     if (search.source !== "reddit") return true;

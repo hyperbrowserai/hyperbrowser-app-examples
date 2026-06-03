@@ -6,13 +6,15 @@ HyperGrowth is a developer-GTM intelligence app that mines public developer comm
 
 ## Why This Example Exists
 
-Growth teams at developer-tool companies need to find where demand is already leaking out into the open: GitHub issues, Hacker News threads, Reddit discussions, and other community surfaces. HyperGrowth demonstrates how Hyperbrowser can turn that messy public web signal into structured growth experiments.
+Growth teams at developer-tool companies need to find where demand is already leaking out into the open: GitHub issues, Hacker News threads, Reddit discussions, and open-web posts. HyperGrowth demonstrates how Hyperbrowser can turn that messy public web signal into structured growth experiments.
 
 ## Current Foundation
 
 - Next.js App Router, TypeScript, Tailwind CSS
-- Hyperbrowser SDK integration for live public-page fetching
-- Source adapters for Hacker News, GitHub Issues, and Reddit
+- Hyperbrowser SDK integration for broad web discovery and URL enrichment
+- Source adapters for Hacker News Algolia, GitHub Issues API, and Hyperbrowser Search
+- Configurable subreddit targeting through Hyperbrowser open-web search, without requiring direct Reddit API credentials
+- Evidence-candidate quality gate that rejects login pages, block walls, empty results, and navigation chrome before scoring
 - Typed request/response models for raw signals, normalized evidence, scores, clusters, growth plays, and growth briefs
 - Deterministic signal scoring for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, and confidence
 - Jaccard-based dedupe to compress repeated evidence before clustering
@@ -43,6 +45,9 @@ cp env.example .env.local
 ```env
 HYPERBROWSER_API_KEY=your_hyperbrowser_api_key
 
+# Optional source-native connectors
+GITHUB_TOKEN=your_github_token
+
 # Optional generic OpenAI-compatible provider
 LLM_PROVIDER=openrouter
 LLM_BASE_URL=https://openrouter.ai/api/v1
@@ -72,27 +77,42 @@ Open [http://localhost:3000](http://localhost:3000).
 ## How It Works
 
 1. Enter a developer-market pain or topic, such as `Playwright captcha failures`.
-2. Select public sources: Hacker News, GitHub Issues, and Reddit.
-3. HyperGrowth builds a source-routed query plan. In lean, balanced, or full mode, an LLM can generate source-specific search queries; otherwise the deterministic static plan is used.
-4. Source adapters collect raw evidence. Hacker News uses Algolia stories plus comments, GitHub uses issue search with browser-automation ecosystem boosts, and Reddit searches selected subreddits before a global fallback.
-   Reddit fetches use Hyperbrowser stealth mode because Reddit may block automated traffic. If Reddit still blocks, use a Hyperbrowser plan or BYOK setup that supports proxy-backed sessions.
-5. HyperGrowth normalizes raw evidence into `PainSignal` records with source URL, canonical URL, quote, author, timestamp, engagement, evidence kind, repository, matched terms, tools mentioned, category, and urgency.
-6. The scoring engine assigns deterministic scores for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, confidence, and total signal value.
-7. The dedupe engine compresses near-duplicate evidence using Jaccard similarity.
-8. Balanced and full modes send a small mixed batch to the LLM for contextual judgment. Invalid output gets one repair attempt, then deterministic fallback.
-9. Score fusion combines heuristic dimensions with LLM dimensions while keeping recency and source reliability deterministic.
-10. The clustering engine groups evidence by pain category and calculates cluster strength using frequency, source diversity, average pain intensity, and Hyperbrowser fit.
-11. The growth-play engine ranks actions by expected value, balancing commercial value, evidence strength, channel fit, confidence, and execution cost.
-12. Full mode can optionally refine cluster and play language, but every claim must cite existing signal IDs. If synthesis fails, deterministic synthesis is used.
-13. The API returns a growth brief plus UI-compatible fields for evidence quotes, clusters, content angles, outbound drafts, diagnostics, and LLM usage metadata.
+2. Select public sources: Hacker News, GitHub Issues, and open web via Hyperbrowser.
+3. HyperGrowth builds a source-routed query plan. In lean, balanced, or full mode, an LLM can generate source-specific search queries and source weights; otherwise the deterministic static plan is used.
+4. Source adapters collect `EvidenceCandidate` records instead of final signals:
+   - GitHub uses the Issues API, optionally with `GITHUB_TOKEN`, and enriches issue bodies plus a small comment sample.
+   - Hacker News uses only the Algolia API for stories and comments. It does not scrape the Algolia UI, so `no stories matching` is treated as no evidence.
+   - Hyperbrowser Search discovers broad open-web results across blogs, docs, workaround posts, and pages without clean APIs.
+   - Reddit is not a direct source. Configured subreddits become `site:reddit.com/r/...` Hyperbrowser Search targets, and only canonical thread URLs are eligible for Fetch.
+5. A deterministic evidence-quality gate rejects login pages, block walls, empty-result pages, navigation chrome, thin snippets, and weak query-overlap candidates before scoring.
+6. Full or higher LLM budgets can run a search-gap check when candidate volume is thin, adding one extra source-specific search.
+7. Balanced and full modes can run LLM candidate triage before enrichment so Hyperbrowser Fetch is spent on likely evidence.
+8. Hyperbrowser Fetch enriches selected canonical URLs, especially open-web results returned by Hyperbrowser Search.
+   Reddit permalinks use Hyperbrowser stealth mode and are rejected if Fetch returns a login, search, landing, or block page.
+9. Full mode can use LLM evidence extraction to produce grounded quotes from candidate metadata and fetched markdown. The fallback extractor remains deterministic.
+10. HyperGrowth normalizes extracted raw evidence into `PainSignal` records with source URL, canonical URL, quote, author, timestamp, engagement, evidence kind, repository, matched terms, tools mentioned, category, and urgency.
+11. The scoring engine assigns deterministic scores for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, confidence, and total signal value.
+12. The dedupe engine compresses near-duplicate evidence using Jaccard similarity.
+13. Balanced and full modes send a small mixed batch to the LLM for contextual judgment. Invalid output gets one repair attempt, then deterministic fallback.
+14. Score fusion combines heuristic dimensions with LLM dimensions while keeping recency and source reliability deterministic.
+15. The clustering engine groups evidence by pain category and calculates cluster strength using frequency, source diversity, average pain intensity, and Hyperbrowser fit.
+16. The growth-play engine ranks actions by expected value, balancing commercial value, evidence strength, channel fit, confidence, and execution cost.
+17. Full mode can optionally refine cluster and play language, but every claim must cite existing signal IDs. If synthesis fails, deterministic synthesis is used.
+18. The API returns a growth brief plus UI-compatible fields for evidence quotes, clusters, content angles, outbound drafts, diagnostics, and LLM usage metadata.
 
 ## Signal Pipeline
 
 HyperGrowth treats growth research as an evidence-to-action pipeline:
 
 ```txt
-raw community evidence
+user query
 -> source-routed query plan
+-> source-native API collectors plus Hyperbrowser Search
+-> evidence candidates
+-> quality gate
+-> optional LLM candidate triage
+-> Hyperbrowser Fetch enrichment for selected URLs
+-> optional LLM evidence extraction
 -> normalized pain signals
 -> deterministic signal scores
 -> deduped evidence groups
@@ -219,9 +239,13 @@ Request:
 ```json
 {
   "query": "Playwright captcha failures",
-  "sources": ["hackernews", "github", "reddit"],
+  "sources": ["hackernews", "github", "hyperbrowser"],
   "maxResults": 12,
-  "analysisMode": "balanced"
+  "analysisMode": "balanced",
+  "openWebTargets": {
+    "includeBroadWeb": true,
+    "redditSubreddits": ["webscraping", "playwright", "automation"]
+  }
 }
 ```
 
@@ -247,7 +271,7 @@ type MineResult = {
 
 Live runs do not substitute demo data when no evidence is found. Empty live results return `mode: "live"`, empty arrays, a low-confidence brief, executed-search diagnostics, and notes explaining what happened.
 
-`metadata.timings` reports phase durations for query planning, source collection, normalization, pipeline work, and total request time. `metadata.searchDiagnostics` reports each executed source search with status, duration, and raw signal count.
+`metadata.timings` reports phase durations for query planning, source collection, evidence preparation, normalization, pipeline work, and total request time. `metadata.searchDiagnostics` reports each executed source search with status, duration, raw candidate count, and any source-level errors.
 
 ## Verification
 
@@ -260,7 +284,6 @@ npm test
 ## Next Steps
 
 - Add streaming progress updates for source fetch, extraction, and synthesis.
-- Improve source-specific parsers for cleaner titles, authors, timestamps, and engagement.
-- Add UI controls for analysis mode, provider diagnostics, and local run history.
+- Add UI controls for provider/source credential diagnostics and local run history.
 - Add export to JSON and Markdown.
 - Add a polished dashboard UI and responsive visual system.

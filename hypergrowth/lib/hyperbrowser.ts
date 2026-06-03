@@ -2,6 +2,11 @@ import { Hyperbrowser } from "@hyperbrowser/sdk";
 
 const defaultHyperbrowserTimeoutMs = 12_000;
 type HyperbrowserStealthMode = "none" | "auto" | "ultra";
+type WebSearchResultItem = {
+  title: string;
+  url: string;
+  description: string;
+};
 
 export function getHyperbrowserClient(): Hyperbrowser {
   const apiKey = process.env.HYPERBROWSER_API_KEY;
@@ -53,6 +58,19 @@ export async function fetchMarkdown(
           : "",
     links: Array.isArray(record.links) ? record.links : [],
   };
+}
+
+export async function searchWeb(
+  client: Hyperbrowser,
+  query: string
+): Promise<WebSearchResultItem[]> {
+  const response = await client.web.search({ query });
+
+  if (response.status !== "completed" && response.error) {
+    throw new Error(response.error);
+  }
+
+  return response.data?.results ?? [];
 }
 
 function getHyperbrowserTimeoutMs(): number {

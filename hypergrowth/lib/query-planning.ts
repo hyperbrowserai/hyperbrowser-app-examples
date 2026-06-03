@@ -8,12 +8,13 @@ import {
   toolTerms,
 } from "./taxonomy";
 import { tokenize, unique } from "./text";
-import type { QueryPlan, SignalSource } from "./types";
+import type { OpenWebTargets, QueryPlan, SignalSource } from "./types";
 
 const emptySourceQueries: Record<SignalSource, string[]> = {
   github: [],
   hackernews: [],
   reddit: [],
+  hyperbrowser: [],
 };
 
 const queryPlanSchema = z.object({
@@ -27,7 +28,16 @@ const queryPlanSchema = z.object({
     github: z.array(z.string()).default([]),
     hackernews: z.array(z.string()).default([]),
     reddit: z.array(z.string()).default([]),
+    hyperbrowser: z.array(z.string()).default([]),
   }),
+  sourceWeights: z
+    .object({
+      github: z.number().optional(),
+      hackernews: z.number().optional(),
+      reddit: z.number().optional(),
+      hyperbrowser: z.number().optional(),
+    })
+    .optional(),
   rationale: z.array(z.string()).default([]),
 });
 
@@ -35,14 +45,21 @@ export async function buildQueryPlan({
   query,
   selectedSources,
   allowLLM,
+  openWebTargets = defaultOpenWebTargets,
 }: {
   query: string;
   selectedSources: SignalSource[];
   allowLLM: boolean;
+  openWebTargets?: OpenWebTargets;
 }): Promise<{ plan: QueryPlan; callsAttempted: number; failureReason?: string }> {
   if (!allowLLM) {
     return {
-      plan: buildStaticQueryPlan(query, selectedSources, "static-source-routed"),
+      plan: buildStaticQueryPlan(
+        query,
+        selectedSources,
+        "static-source-routed",
+        openWebTargets
+      ),
       callsAttempted: 0,
     };
   }
@@ -50,7 +67,12 @@ export async function buildQueryPlan({
   const llm = getLLMClient();
   if (!llm) {
     return {
-      plan: buildStaticQueryPlan(query, selectedSources, "static-source-routed"),
+      plan: buildStaticQueryPlan(
+        query,
+        selectedSources,
+        "static-source-routed",
+        openWebTargets
+      ),
       callsAttempted: 0,
       failureReason: "No LLM provider configured for query expansion.",
     };
@@ -64,12 +86,18 @@ export async function buildQueryPlan({
       query,
       selectedSources,
       repairInput: null,
+      openWebTargets,
     });
     return { plan, callsAttempted };
   } catch (firstError) {
     if (isLLMTransportError(firstError)) {
       return {
-        plan: buildStaticQueryPlan(query, selectedSources, "static-source-routed"),
+      plan: buildStaticQueryPlan(
+        query,
+        selectedSources,
+        "static-source-routed",
+        openWebTargets
+      ),
         callsAttempted,
         failureReason: `Query expansion transport failed: ${firstError}`,
       };
@@ -81,11 +109,17 @@ export async function buildQueryPlan({
         query,
         selectedSources,
         repairInput: String(firstError),
+        openWebTargets,
       });
       return { plan, callsAttempted };
     } catch (repairError) {
       return {
-        plan: buildStaticQueryPlan(query, selectedSources, "static-source-routed"),
+        plan: buildStaticQueryPlan(
+          query,
+          selectedSources,
+          "static-source-routed",
+          openWebTargets
+        ),
         callsAttempted,
         failureReason: `Query expansion failed after repair: ${repairError}`,
       };
@@ -96,7 +130,8 @@ export async function buildQueryPlan({
 export function buildStaticQueryPlan(
   query: string,
   selectedSources: SignalSource[],
-  strategy: QueryPlan["strategy"] = "static-source-routed"
+  strategy: QueryPlan["strategy"] = "static-source-routed",
+  openWebTargets: OpenWebTargets = defaultOpenWebTargets
 ): QueryPlan {
   const sourceQueries: Record<SignalSource, string[]> = {
     ...emptySourceQueries,
@@ -126,13 +161,17 @@ export function buildStaticQueryPlan(
     ];
   }
 
+  if (selectedSources.includes("hyperbrowser")) {
+    sourceQueries.hyperbrowser = buildOpenWebQueries(query, openWebTargets);
+  }
+
   return validateQueryPlan(
     {
       originalQuery: query,
       strategy,
       sourceQueries,
       rationale: [
-        "Static source-routed fallback uses issue language for GitHub, category language for Hacker News, and frustration language for Reddit.",
+        "Static source-routed fallback uses issue language for GitHub, category language for Hacker News, and Hyperbrowser open-web queries biased by configured subreddit targets.",
       ],
     },
     query,
@@ -144,10 +183,12 @@ function requestQueryPlan({
   query,
   selectedSources,
   repairInput,
+  openWebTargets = defaultOpenWebTargets,
 }: {
   query: string;
   selectedSources: SignalSource[];
   repairInput: string | null;
+  openWebTargets?: OpenWebTargets;
 }): Promise<QueryPlan> {
   const llm = getLLMClient();
   if (!llm) throw new Error("No LLM provider configured.");
@@ -171,10 +212,13 @@ function requestQueryPlan({
             previousFailure: repairInput,
             originalQuery: query,
             selectedSources,
+            openWebTargets,
             constraints: [
               "GitHub queries should use issue/failure language.",
               "Hacker News queries should use market/category language.",
               "Reddit queries should use frustration/workaround language.",
+              "Hyperbrowser queries should include broad open-web discovery when includeBroadWeb is true.",
+              "Hyperbrowser queries should include site:reddit.com/r/{subreddit} searches for the supplied redditSubreddits when relevant.",
               "Return at most 3 queries per source.",
               "Queries must be 80 characters or fewer.",
               "Avoid vague phrases like developer pain points.",
@@ -187,6 +231,13 @@ function requestQueryPlan({
                 github: ["string"],
                 hackernews: ["string"],
                 reddit: ["string"],
+                hyperbrowser: ["string"],
+              },
+              sourceWeights: {
+                github: 0.9,
+                hackernews: 0.5,
+                reddit: 0.7,
+                hyperbrowser: 0.8,
               },
               rationale: ["string"],
             },
@@ -198,7 +249,13 @@ function requestQueryPlan({
       const content = response.choices[0]?.message.content;
       if (!content) throw new Error("LLM returned empty query plan.");
       const parsed = extractJsonObject(content);
-      return validateQueryPlan(parsed, query, selectedSources, "llm-source-routed");
+      return validateQueryPlan(
+        parsed,
+        query,
+        selectedSources,
+        "llm-source-routed",
+        openWebTargets
+      );
     });
 }
 
@@ -206,7 +263,8 @@ export function validateQueryPlan(
   input: unknown,
   originalQuery: string,
   selectedSources: SignalSource[],
-  forcedStrategy?: QueryPlan["strategy"]
+  forcedStrategy?: QueryPlan["strategy"],
+  openWebTargets: OpenWebTargets = defaultOpenWebTargets
 ): QueryPlan {
   const parsed = queryPlanSchema.parse(input);
   const allowedTerms = unique([
@@ -227,14 +285,77 @@ export function validateQueryPlan(
     ).slice(0, 3);
   }
 
+  if (selectedSources.includes("hyperbrowser")) {
+    sourceQueries.hyperbrowser = mergeHyperbrowserQueries(
+      sourceQueries.hyperbrowser,
+      originalQuery,
+      openWebTargets
+    );
+  }
+
   return {
     originalQuery,
     strategy: forcedStrategy ?? parsed.strategy,
     sourceQueries,
+    sourceWeights: sanitizeSourceWeights(parsed.sourceWeights, selectedSources),
     rationale: parsed.rationale
       .filter((item) => typeof item === "string")
       .slice(0, 5),
   };
+}
+
+const defaultOpenWebTargets: OpenWebTargets = {
+  includeBroadWeb: true,
+  redditSubreddits: [
+    "webscraping",
+    "playwright",
+    "puppeteer",
+    "automation",
+    "webdev",
+  ],
+};
+
+function buildOpenWebQueries(
+  query: string,
+  openWebTargets: OpenWebTargets
+): string[] {
+  return mergeHyperbrowserQueries([], query, openWebTargets);
+}
+
+function mergeHyperbrowserQueries(
+  llmQueries: string[],
+  query: string,
+  openWebTargets: OpenWebTargets
+): string[] {
+  const broadQueries = openWebTargets.includeBroadWeb
+    ? [`${query} workaround`]
+    : [];
+  const subredditQueries = openWebTargets.redditSubreddits
+    .slice(0, 3)
+    .map((subreddit) => `site:reddit.com/r/${subreddit} ${query}`);
+
+  return unique([...llmQueries, ...broadQueries, ...subredditQueries])
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter((item) => item.length >= 3)
+    .slice(0, 4);
+}
+
+function sanitizeSourceWeights(
+  weights: QueryPlan["sourceWeights"],
+  selectedSources: SignalSource[]
+): QueryPlan["sourceWeights"] {
+  if (!weights) return undefined;
+
+  const sanitized: Partial<Record<SignalSource, number>> = {};
+
+  for (const source of selectedSources) {
+    const value = weights[source];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      sanitized[source] = Math.max(0, Math.min(1, Number(value.toFixed(2))));
+    }
+  }
+
+  return sanitized;
 }
 
 function sanitizeQueries(

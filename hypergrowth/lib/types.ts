@@ -1,4 +1,4 @@
-export type SignalSource = "hackernews" | "github" | "reddit";
+export type SignalSource = "hackernews" | "github" | "reddit" | "hyperbrowser";
 
 export type Urgency = "low" | "medium" | "high";
 
@@ -28,7 +28,10 @@ export type EvidenceKind =
   | "issue"
   | "post"
   | "discussion"
-  | "search-result";
+  | "search-result"
+  | "article"
+  | "forum-thread"
+  | "web-page";
 
 export type EvidenceEngagement = {
   score?: number;
@@ -41,7 +44,13 @@ export type QueryPlan = {
   originalQuery: string;
   strategy: SearchStrategy;
   sourceQueries: Record<SignalSource, string[]>;
+  sourceWeights?: Partial<Record<SignalSource, number>>;
   rationale: string[];
+};
+
+export type OpenWebTargets = {
+  includeBroadWeb: boolean;
+  redditSubreddits: string[];
 };
 
 export type ExecutedSearch = {
@@ -59,6 +68,9 @@ export type SearchDiagnostic = ExecutedSearch & {
   durationMs: number;
   status: "success" | "error";
   rawSignals: number;
+  acceptedCandidates?: number;
+  rejectedCandidates?: number;
+  error?: string;
 };
 
 export type SourceBudgetPolicy = {
@@ -83,6 +95,40 @@ export type RawSignal = {
   ecosystemBoost?: boolean;
   sourceReliabilityOverride?: number;
   raw?: unknown;
+};
+
+export type EvidenceDiscoveryMethod =
+  | "api"
+  | "hyperbrowser-search"
+  | "hyperbrowser-fetch";
+
+export type EvidenceQualityFlag =
+  | "login_required"
+  | "blocked"
+  | "no_results"
+  | "navigation_chrome"
+  | "too_short"
+  | "weak_query_overlap"
+  | "thin_snippet";
+
+export type EvidenceCandidate = {
+  id: string;
+  source: SignalSource;
+  discoveryMethod: EvidenceDiscoveryMethod;
+  sourceUrl: string;
+  canonicalUrl?: string;
+  title: string;
+  snippet: string;
+  body?: string;
+  author?: string;
+  publishedAt?: string;
+  engagement?: EvidenceEngagement;
+  evidenceKind?: EvidenceKind;
+  repo?: string;
+  ecosystemBoost?: boolean;
+  sourceReliabilityOverride?: number;
+  raw?: unknown;
+  qualityFlags: EvidenceQualityFlag[];
 };
 
 export type PainSignal = {
@@ -220,6 +266,9 @@ export type LLMUsageMetadata = {
   provider?: string;
   model?: string;
   queryExpansionMode: "disabled" | "used" | "fallback";
+  candidateTriageMode?: "disabled" | "used" | "fallback";
+  evidenceExtractionMode?: "disabled" | "used" | "fallback" | "partial";
+  gapExpansionMode?: "disabled" | "used" | "fallback";
   judgmentMode: "disabled" | "used" | "fallback" | "partial";
   synthesisMode: "disabled" | "used" | "fallback";
   callsAttempted: number;
@@ -231,6 +280,7 @@ export type MineRequest = {
   sources: SignalSource[];
   maxResults: number;
   analysisMode?: AnalysisMode;
+  openWebTargets?: OpenWebTargets;
 };
 
 export type MinePipelineResult = {

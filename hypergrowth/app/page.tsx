@@ -1,25 +1,66 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Loader2, Radar, Search, Sparkles } from "lucide-react";
+import {
+  Loader2,
+  Minus,
+  Plus,
+  Radar,
+  Search,
+} from "lucide-react";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { SourceSelector } from "@/components/SourceSelector";
 import { buildDemoResult } from "@/lib/demo-data";
-import type { MineResult, SignalSource } from "@/lib/types";
+import type { AnalysisMode, MineResult, SignalSource } from "@/lib/types";
+
+const analysisModes: Array<{
+  id: AnalysisMode;
+  label: string;
+  icon: string;
+}> = [
+  { id: "deterministic", label: "Deterministic", icon: "⚙" },
+  { id: "lean", label: "Lean", icon: "⚡" },
+  { id: "balanced", label: "Balanced", icon: "◎" },
+  { id: "full", label: "Full", icon: "✦" },
+];
+
+const maxResultOptions = [3, 6, 12, 24, 50] as const;
+
+const defaultRedditTargets =
+  "webscraping, playwright, puppeteer, automation, webdev";
 
 export default function Home() {
-  const [query, setQuery] = useState("Playwright captcha failures");
+  const [query, setQuery] = useState(
+    "Playwright Cloudflare browser automation fails in production"
+  );
   const [sources, setSources] = useState<SignalSource[]>([
     "hackernews",
     "github",
-    "reddit",
+    "hyperbrowser",
   ]);
-  const [maxResults, setMaxResults] = useState(12);
+  const [includeBroadWeb, setIncludeBroadWeb] = useState(true);
+  const [redditTargets, setRedditTargets] = useState(defaultRedditTargets);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("balanced");
+  const [maxResults, setMaxResults] = useState(6);
   const [result, setResult] = useState<MineResult>(() =>
-    buildDemoResult("Playwright captcha failures")
+    buildDemoResult(
+      "Playwright Cloudflare browser automation fails in production",
+      "balanced"
+    )
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  function cycleMaxResults(direction: 1 | -1) {
+    const currentIndex = maxResultOptions.indexOf(
+      maxResults as (typeof maxResultOptions)[number]
+    );
+    const nextIndex = Math.max(
+      0,
+      Math.min(maxResultOptions.length - 1, currentIndex + direction)
+    );
+    setMaxResults(maxResultOptions[nextIndex]);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,7 +71,16 @@ export default function Home() {
       const response = await fetch("/api/mine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, sources, maxResults }),
+        body: JSON.stringify({
+          query,
+          sources,
+          maxResults,
+          analysisMode,
+          openWebTargets: {
+            includeBroadWeb,
+            redditSubreddits: parseSubreddits(redditTargets),
+          },
+        }),
       });
 
       const payload = await response.json();
@@ -42,7 +92,9 @@ export default function Home() {
       setResult(payload);
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Unable to mine growth signals."
+        caught instanceof Error
+          ? caught.message
+          : "Unable to mine growth signals."
       );
     } finally {
       setIsLoading(false);
@@ -50,99 +102,188 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 md:px-8 lg:px-10">
-        <header className="flex flex-col justify-between gap-5 border-b border-line pb-6 md:flex-row md:items-end">
-          <div>
-            <div className="mb-5 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-wide">
-              <span className="grid size-8 place-items-center rounded-lg bg-foreground text-accent">
-                <Radar size={17} />
-              </span>
-              HyperGrowth
-            </div>
-            <h1 className="max-w-3xl text-4xl font-black tracking-tight md:text-6xl">
-              Mine developer pain into growth plays.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-muted md:text-lg">
-              Use Hyperbrowser to scan developer communities, cluster pain
-              signals, and turn raw demand into content, outbound, community,
-              and landing-page experiments.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-line bg-panel p-4 text-sm text-muted md:w-80">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-foreground">
-              <Sparkles size={16} />
-              Foundation mode
-            </div>
-            API contracts, source adapters, demo fallback, and synthesis are in
-            place. Visual polish comes next.
-          </div>
-        </header>
-
+    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
+      <main className="relative z-10 mx-auto flex w-full max-w-[1480px] flex-col gap-3 px-3 py-3 sm:px-4 lg:px-6">
+        {/* ── Command Bar ── */}
         <form
           onSubmit={handleSubmit}
-          className="rounded-xl border border-line bg-panel p-5 shadow-sm"
+          className="rounded-lg border border-line bg-panel/80 shadow-[0_16px_64px_rgba(0,0,0,0.32)] backdrop-blur-xl"
         >
-          <div className="grid gap-4 lg:grid-cols-[1fr_180px_auto]">
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase text-muted">
-                Market or pain to mine
+          {/* Row 1: Branding + Query + Sources + Subreddits */}
+          <div className="flex flex-col gap-3 border-b border-line/60 px-4 py-3 lg:flex-row lg:items-center">
+            {/* Branding */}
+            <div className="flex shrink-0 items-center gap-2.5">
+              <span className="grid size-9 place-items-center rounded-lg border border-accent/40 bg-accent/12 text-accent shadow-[0_0_24px_rgba(124,255,178,0.15)]">
+                <Radar size={18} />
               </span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                className="h-12 w-full rounded-lg border border-line bg-white px-4 text-sm outline-none transition focus:border-foreground"
-                placeholder="browser automation blocked by captchas"
-              />
+              <div>
+                <h1 className="text-base font-black tracking-tight">
+                  HyperGrowth
+                </h1>
+                <p className="text-[11px] leading-none text-muted">
+                  Developer Growth Intelligence
+                </p>
+              </div>
+            </div>
+
+            <div className="mx-2 hidden h-8 w-px bg-line/60 lg:block" />
+
+            {/* Query */}
+            <label className="block min-w-0 flex-1">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+                Query
+              </span>
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
+                />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="h-9 w-full rounded-md border border-line bg-black/30 pl-8 pr-3 text-[13px] text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60 focus:bg-black/40"
+                  placeholder="e.g. browser automation blocked by captchas"
+                />
+              </div>
             </label>
 
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase text-muted">
-                Max signals
-              </span>
-              <select
-                value={maxResults}
-                onChange={(event) => setMaxResults(Number(event.target.value))}
-                className="h-12 w-full rounded-lg border border-line bg-white px-4 text-sm outline-none transition focus:border-foreground"
-              >
-                <option value={6}>6</option>
-                <option value={12}>12</option>
-                <option value={18}>18</option>
-                <option value={24}>24</option>
-              </select>
-            </label>
+            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
 
+            {/* Sources */}
+            <div className="shrink-0">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+                Sources
+              </span>
+              <SourceSelector value={sources} onChange={setSources} />
+            </div>
+          </div>
+
+          {/* Row 2: Subreddits (if web selected) + Analysis Mode + Max Results + Submit */}
+          <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-end">
+            {/* Subreddits — always inline when hyperbrowser selected */}
+            {sources.includes("hyperbrowser") ? (
+              <div className="flex min-w-0 flex-1 items-end gap-3">
+                <label className="block min-w-0 flex-1">
+                  <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+                    Subreddits
+                  </span>
+                  <input
+                    value={redditTargets}
+                    onChange={(event) => setRedditTargets(event.target.value)}
+                    className="h-9 w-full rounded-md border border-line bg-black/30 px-3 text-[13px] text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60"
+                    placeholder="webscraping, playwright, automation"
+                  />
+                </label>
+
+                <label className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-line bg-black/20 px-3 text-[11px] font-semibold text-muted transition hover:border-accent/30">
+                  <input
+                    type="checkbox"
+                    checked={includeBroadWeb}
+                    onChange={(event) =>
+                      setIncludeBroadWeb(event.target.checked)
+                    }
+                    className="size-3.5 accent-[var(--accent)]"
+                  />
+                  Broad web
+                </label>
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )}
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+
+            {/* Analysis Mode — segmented control */}
+            <div className="shrink-0">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+                Analysis Mode
+              </span>
+              <div className="flex h-9 overflow-hidden rounded-md border border-line">
+                {analysisModes.map((mode) => {
+                  const selected = analysisMode === mode.id;
+
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setAnalysisMode(mode.id)}
+                      className={`flex items-center gap-1 px-3 text-[12px] font-semibold transition ${
+                        selected
+                          ? "bg-accent/15 text-accent shadow-[inset_0_0_12px_rgba(124,255,178,0.08)]"
+                          : "bg-black/20 text-muted hover:bg-white/[0.04] hover:text-foreground"
+                      } ${mode.id !== "deterministic" ? "border-l border-line" : ""}`}
+                    >
+                      <span className="text-[11px]">{mode.icon}</span>
+                      <span className="hidden sm:inline">{mode.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+
+            {/* Max Results — stepper */}
+            <div className="shrink-0">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+                Max Results
+              </span>
+              <div className="flex h-9 items-center rounded-md border border-line bg-black/20">
+                <button
+                  type="button"
+                  onClick={() => cycleMaxResults(-1)}
+                  className="grid size-9 place-items-center text-muted transition hover:text-foreground"
+                >
+                  <Minus size={14} />
+                </button>
+                <span className="min-w-[2.5rem] text-center text-sm font-bold text-foreground">
+                  {maxResults}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => cycleMaxResults(1)}
+                  className="grid size-9 place-items-center text-muted transition hover:text-foreground"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+
+            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
-              className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-foreground px-5 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 lg:mt-auto"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-accent/50 bg-accent px-5 text-[13px] font-black text-background shadow-[0_0_24px_rgba(124,255,178,0.18)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? (
-                <Loader2 className="animate-spin" size={17} />
+                <Loader2 className="animate-spin" size={15} />
               ) : (
-                <Search size={17} />
+                <Radar size={15} />
               )}
-              {isLoading ? "Mining" : "Mine signals"}
+              {isLoading ? "Mining…" : "Run Analysis"}
             </button>
           </div>
 
-          <div className="mt-5">
-            <span className="mb-2 block text-xs font-bold uppercase text-muted">
-              Sources
-            </span>
-            <SourceSelector value={sources} onChange={setSources} />
-          </div>
-
           {error ? (
-            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {error}
-            </p>
+            <div className="border-t border-danger/20 px-4 py-2">
+              <p className="text-[12px] text-danger">{error}</p>
+            </div>
           ) : null}
         </form>
 
-        <ResultsDashboard result={result} />
+        {/* ── Results ── */}
+        <ResultsDashboard result={result} isLoading={isLoading} />
       </main>
     </div>
   );
+}
+
+function parseSubreddits(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim().replace(/^r\//i, ""))
+    .filter(Boolean)
+    .slice(0, 8);
 }

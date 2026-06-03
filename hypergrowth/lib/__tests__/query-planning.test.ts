@@ -6,7 +6,7 @@ describe("query planning", () => {
     const plan = buildStaticQueryPlan("browser automation fails", [
       "github",
       "hackernews",
-      "reddit",
+      "hyperbrowser",
     ]);
 
     expect(plan.strategy).toBe("static-source-routed");
@@ -14,8 +14,8 @@ describe("query planning", () => {
     expect(plan.sourceQueries.hackernews).toContain(
       "browser automation fails browser automation"
     );
-    expect(plan.sourceQueries.reddit).toContain(
-      "browser automation fails keeps getting blocked"
+    expect(plan.sourceQueries.hyperbrowser).toContain(
+      "site:reddit.com/r/webscraping browser automation fails"
     );
   });
 
@@ -28,15 +28,18 @@ describe("query planning", () => {
           github: ["developer pain points", "unrelated accounting reports", "playwright timeout"],
           hackernews: ["market research", "browser automation anti bot"],
           reddit: ["growth ideas", "scraping keeps getting blocked"],
+          hyperbrowser: ["browser automation production outage"],
         },
         rationale: ["test"],
       },
       "browser automation fails",
-      ["github", "hackernews", "reddit"]
+      ["github", "hackernews", "hyperbrowser"]
     );
 
     expect(plan.sourceQueries.github).toEqual(["playwright timeout"]);
     expect(plan.sourceQueries.hackernews).toEqual(["browser automation anti bot"]);
-    expect(plan.sourceQueries.reddit).toEqual(["scraping keeps getting blocked"]);
+    expect(plan.sourceQueries.hyperbrowser).toContain(
+      "site:reddit.com/r/webscraping browser automation fails"
+    );
   });
 });

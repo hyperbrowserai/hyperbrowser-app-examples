@@ -1,63 +1,180 @@
 import type { Hyperbrowser } from "@hyperbrowser/sdk";
-import { fetchMarkdown } from "../hyperbrowser";
+import { searchWeb } from "../hyperbrowser";
 import { githubEcosystemRepos } from "../taxonomy";
-import type { RawSignal, SignalSource } from "../types";
+import type {
+  EvidenceCandidate,
+  EvidenceKind,
+  SignalSource,
+} from "../types";
 
-type SourceConfig = {
-  label: string;
-  searchUrl: (query: string) => string;
+type CollectSourceCandidatesInput = {
+  client: Hyperbrowser;
+  source: SignalSource;
+  query: string;
+  maxResults: number;
 };
 
-export const sourceConfigs: Record<SignalSource, SourceConfig> = {
-  hackernews: {
-    label: "Hacker News",
-    searchUrl: (query) =>
-      `https://hn.algolia.com/?q=${encodeURIComponent(query)}`,
-  },
-  github: {
-    label: "GitHub Issues",
-    searchUrl: (query) =>
-      `https://github.com/search?q=${encodeURIComponent(query)}&type=issues`,
-  },
-  reddit: {
-    label: "Reddit",
-    searchUrl: (query) =>
-      `https://www.reddit.com/search/?q=${encodeURIComponent(query)}&sort=relevance`,
-  },
+type GitHubSearchResponse = {
+  items?: Array<{
+    html_url?: string;
+    title?: string;
+    body?: string | null;
+    user?: { login?: string };
+    created_at?: string;
+    updated_at?: string;
+    comments?: number;
+    comments_url?: string;
+    repository_url?: string;
+    labels?: Array<{ name?: string }>;
+    reactions?: { total_count?: number };
+  }>;
 };
 
-export async function mineSource(
-  client: Hyperbrowser,
-  source: SignalSource,
-  query: string,
-  maxResults: number
-): Promise<RawSignal[]> {
+type GitHubComment = {
+  body?: string | null;
+  user?: { login?: string };
+  created_at?: string;
+  reactions?: { total_count?: number };
+};
+
+type HNHit = {
+  title?: string;
+  story_title?: string;
+  story_text?: string;
+  comment_text?: string;
+  url?: string;
+  story_url?: string;
+  story_id?: number;
+  objectID?: string;
+  author?: string;
+  created_at?: string;
+  points?: number;
+  num_comments?: number;
+};
+
+export async function collectSourceCandidates({
+  client,
+  source,
+  query,
+  maxResults,
+}: CollectSourceCandidatesInput): Promise<EvidenceCandidate[]> {
+  if (source === "github") {
+    return collectGitHubCandidates(query, maxResults);
+  }
+
   if (source === "hackernews") {
-    const algoliaSignals = await mineHackerNewsAlgolia(query, maxResults).catch(
-      () => []
-    );
-
-    if (algoliaSignals.length > 0) return algoliaSignals;
+    return collectHackerNewsCandidates(query, maxResults);
   }
 
   if (source === "reddit") {
-    const redditSignals = await mineReddit(client, query, maxResults).catch(
-      () => []
+    throw new Error(
+      "Direct Reddit API collection is disabled. Use Hyperbrowser open-web subreddit targets instead."
     );
-
-    if (redditSignals.length > 0) return redditSignals;
   }
 
-  return mineWithHyperbrowser(client, source, query, maxResults);
+  return collectHyperbrowserCandidates(client, query, maxResults);
 }
 
-async function mineHackerNewsAlgolia(
+async function collectGitHubCandidates(
   query: string,
   maxResults: number
-): Promise<RawSignal[]> {
+): Promise<EvidenceCandidate[]> {
+  const searchQuery = query.toLowerCase().includes("is:issue")
+    ? query
+    : `${query} is:issue`;
+  const url = `https://api.github.com/search/issues?q=${encodeURIComponent(
+    searchQuery
+  )}&sort=updated&order=desc&per_page=${Math.min(maxResults, 10)}`;
+  const response = await fetch(url, {
+    headers: githubHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub API returned ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GitHubSearchResponse;
+  const candidates: EvidenceCandidate[] = [];
+
+  for (const item of payload.items ?? []) {
+    if (candidates.length >= maxResults) break;
+
+    const canonicalUrl = item.html_url ?? url;
+    const repo = detectGithubRepo(
+      item.repository_url?.replace("https://api.github.com/repos/", "") ??
+        canonicalUrl
+    );
+    const body = stripMarkdown(item.body ?? "");
+    const comments = item.comments_url
+      ? await fetchGitHubComments(item.comments_url, 2).catch(() => [])
+      : [];
+    const commentBody = comments
+      .map((comment) => stripMarkdown(comment.body ?? ""))
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("\n\n");
+
+    candidates.push({
+      id: candidateId("github", canonicalUrl, candidates.length),
+      source: "github",
+      discoveryMethod: "api",
+      sourceUrl: url,
+      canonicalUrl,
+      title: item.title?.trim() || "GitHub issue",
+      snippet: firstMeaningfulText([body, commentBody, item.title ?? ""]),
+      body: [body, commentBody].filter(Boolean).join("\n\n"),
+      author: item.user?.login,
+      publishedAt: item.created_at ?? item.updated_at,
+      engagement: {
+        comments: item.comments,
+        reactions: item.reactions?.total_count,
+      },
+      evidenceKind: "issue",
+      repo,
+      ecosystemBoost: repo ? isEcosystemRepo(repo) : undefined,
+      sourceReliabilityOverride: 0.86,
+      raw: item,
+      qualityFlags: [],
+    });
+  }
+
+  return candidates;
+}
+
+async function fetchGitHubComments(
+  commentsUrl: string,
+  maxComments: number
+): Promise<GitHubComment[]> {
+  const response = await fetch(`${commentsUrl}?per_page=${maxComments}`, {
+    headers: githubHeaders(),
+  });
+
+  if (!response.ok) return [];
+  return ((await response.json()) as GitHubComment[]).slice(0, maxComments);
+}
+
+function githubHeaders(): HeadersInit {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "HyperGrowth",
+  };
+
+  if (process.env.GITHUB_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  }
+
+  return headers;
+}
+
+async function collectHackerNewsCandidates(
+  query: string,
+  maxResults: number
+): Promise<EvidenceCandidate[]> {
+  const perType = Math.max(1, Math.ceil(maxResults / 2));
   const [stories, comments] = await Promise.all([
-    fetchHackerNewsHits(query, "story", Math.ceil(maxResults / 2)),
-    fetchHackerNewsHits(query, "comment", Math.ceil(maxResults / 2)),
+    fetchHackerNewsHits(query, "story", perType),
+    fetchHackerNewsHits(query, "comment", perType),
   ]);
 
   return [...stories, ...comments].slice(0, maxResults);
@@ -67,7 +184,7 @@ async function fetchHackerNewsHits(
   query: string,
   tag: "story" | "comment",
   maxResults: number
-): Promise<RawSignal[]> {
+): Promise<EvidenceCandidate[]> {
   const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(
     query
   )}&tags=${tag}&hitsPerPage=${maxResults}`;
@@ -77,206 +194,139 @@ async function fetchHackerNewsHits(
     throw new Error(`HN Algolia returned ${response.status}`);
   }
 
-  const payload = (await response.json()) as {
-    hits?: Array<{
-      title?: string;
-      story_title?: string;
-      story_text?: string;
-      comment_text?: string;
-      url?: string;
-      story_url?: string;
-      story_id?: number;
-      objectID?: string;
-      author?: string;
-      created_at?: string;
-      points?: number;
-      num_comments?: number;
-    }>;
-  };
+  const payload = (await response.json()) as { hits?: HNHit[] };
 
-  return (payload.hits ?? [])
-    .map((hit) => {
-      const title =
-        hit.title?.trim() ||
-        hit.story_title?.trim() ||
-        "Hacker News discussion";
-      const hnUrl = hit.objectID
-        ? `https://news.ycombinator.com/item?id=${hit.objectID}`
-        : hit.story_id
-          ? `https://news.ycombinator.com/item?id=${hit.story_id}`
+  return (payload.hits ?? []).map((hit, index) => {
+    const title =
+      hit.title?.trim() || hit.story_title?.trim() || "Hacker News discussion";
+    const hnUrl = hit.objectID
+      ? `https://news.ycombinator.com/item?id=${hit.objectID}`
+      : hit.story_id
+        ? `https://news.ycombinator.com/item?id=${hit.story_id}`
         : url;
-      const quote = stripHtml(hit.story_text ?? hit.comment_text ?? title);
-
-      return {
-        source: "hackernews" as const,
-        sourceUrl: hnUrl,
-        canonicalUrl: hit.url || hit.story_url || hnUrl,
-        title,
-        quote,
-        author: hit.author,
-        publishedAt: hit.created_at,
-        evidenceKind: tag,
-        sourceReliabilityOverride: tag === "story" ? 0.76 : 0.7,
-        engagement: {
-          score: hit.points,
-          comments: hit.num_comments,
-        },
-        raw: hit,
-      };
-    })
-    .filter((signal) => signal.quote.length >= 20);
-}
-
-async function mineReddit(
-  client: Hyperbrowser,
-  query: string,
-  maxResults: number
-): Promise<RawSignal[]> {
-  const selectedSubreddits = [
-    "webscraping",
-    "webdev",
-    "learnpython",
-    "programming",
-    "automation",
-    "LocalLLaMA",
-    "LangChain",
-  ];
-  const signals: RawSignal[] = [];
-  const perSubredditLimit = Math.max(1, Math.ceil(maxResults / 3));
-
-  for (const subreddit of selectedSubreddits.slice(0, 3)) {
-    if (signals.length >= maxResults) break;
-
-    const searchUrl = `https://www.reddit.com/r/${subreddit}/search/?q=${encodeURIComponent(
-      query
-    )}&restrict_sr=1&sort=relevance`;
-    const mined = await mineWithHyperbrowser(
-      client,
-      "reddit",
-      query,
-      perSubredditLimit,
-      searchUrl,
-      {
-        evidenceKind: "post",
-        sourceReliabilityOverride: 0.62,
-      }
-    );
-
-    signals.push(...mined);
-  }
-
-  if (signals.length < maxResults) {
-    const globalSearchUrl = sourceConfigs.reddit.searchUrl(query);
-    signals.push(
-      ...(await mineWithHyperbrowser(
-        client,
-        "reddit",
-        query,
-        maxResults - signals.length,
-        globalSearchUrl,
-        {
-          evidenceKind: "post",
-          sourceReliabilityOverride: 0.55,
-        }
-      ))
-    );
-  }
-
-  return signals.slice(0, maxResults);
-}
-
-async function mineWithHyperbrowser(
-  client: Hyperbrowser,
-  source: SignalSource,
-  query: string,
-  maxResults: number,
-  explicitSearchUrl?: string,
-  metadata: Partial<RawSignal> = {}
-): Promise<RawSignal[]> {
-  const config = sourceConfigs[source];
-  const searchUrl = explicitSearchUrl ?? config.searchUrl(query);
-  const { markdown, links } = await fetchMarkdown(client, searchUrl, {
-    stealth: source === "reddit" ? "auto" : undefined,
-  });
-  const candidates = extractCandidateLines(markdown, query);
-  const normalizedLinks = normalizeLinks(links, searchUrl);
-
-  return candidates.slice(0, maxResults).map((candidate, index) => {
-    const url = normalizedLinks[index] ?? searchUrl;
-    const repo = source === "github" ? detectGithubRepo(url) : undefined;
-    const ecosystemBoost = repo ? isEcosystemRepo(repo) : undefined;
+    const text = stripHtml(hit.story_text ?? hit.comment_text ?? "");
 
     return {
-      source,
-      sourceUrl: searchUrl,
-      canonicalUrl: url,
-      title: extractTitle(candidate, config.label),
-      quote: candidate,
-      evidenceKind: source === "github" ? "issue" : "search-result",
-      repo,
-      ecosystemBoost,
-      ...metadata,
+      id: candidateId("hackernews", hnUrl, index),
+      source: "hackernews" as const,
+      discoveryMethod: "api" as const,
+      sourceUrl: url,
+      canonicalUrl: hit.url || hit.story_url || hnUrl,
+      title,
+      snippet: firstMeaningfulText([text, title]),
+      body: text,
+      author: hit.author,
+      publishedAt: hit.created_at,
+      engagement: {
+        score: hit.points,
+        comments: hit.num_comments,
+      },
+      evidenceKind: tag,
+      sourceReliabilityOverride: tag === "story" ? 0.76 : 0.7,
+      raw: hit,
+      qualityFlags: [],
     };
   });
 }
 
-function extractCandidateLines(markdown: string, query: string): string[] {
-  const queryTerms = query
+async function collectHyperbrowserCandidates(
+  client: Hyperbrowser,
+  query: string,
+  maxResults: number
+): Promise<EvidenceCandidate[]> {
+  const results = await searchWeb(client, query);
+
+  return results
+    .filter((result) => isAllowedHyperbrowserResult(result.url))
+    .slice(0, maxResults)
+    .map((result, index) => ({
+      id: candidateId("hyperbrowser", result.url, index),
+      source: "hyperbrowser",
+      discoveryMethod: "hyperbrowser-search",
+      sourceUrl: `hyperbrowser-search:${query}`,
+      canonicalUrl: result.url,
+      title: result.title,
+      snippet: result.description,
+      evidenceKind: inferEvidenceKind(result.url),
+      sourceReliabilityOverride: isRedditUrl(result.url) ? 0.62 : 0.72,
+      raw: result,
+      qualityFlags: [],
+    }));
+}
+
+export function isAllowedHyperbrowserResult(url: string): boolean {
+  if (!isRedditUrl(url)) return true;
+
+  const parsed = safeUrl(url);
+  if (!parsed) return false;
+
+  const path = parsed.pathname.toLowerCase();
+  if (path.includes("/search")) return false;
+  if (path.includes("/login")) return false;
+  if (path.startsWith("/user/")) return false;
+  if (/^\/r\/[^/]+\/?$/.test(path)) return false;
+
+  return /\/r\/[^/]+\/comments\//.test(path) || path.includes("/comments/");
+}
+
+function isRedditUrl(url: string): boolean {
+  return /(^|\.)reddit\.com$/i.test(safeUrl(url)?.hostname ?? "");
+}
+
+function safeUrl(url: string): URL | null {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
+function inferEvidenceKind(url: string): EvidenceKind {
+  const lower = url.toLowerCase();
+
+  if (lower.includes("github.com")) return "issue";
+  if (lower.includes("reddit.com")) return "post";
+  if (lower.includes("news.ycombinator.com")) return "comment";
+  if (lower.includes("forum") || lower.includes("discourse")) return "forum-thread";
+  if (lower.includes("blog")) return "article";
+  return "web-page";
+}
+
+function candidateId(source: SignalSource, key: string, index: number): string {
+  const compact = key
     .toLowerCase()
-    .split(/\s+/)
-    .filter((term) => term.length > 3);
-  const sourceTerms = [
-    ...queryTerms,
-    "playwright",
-    "puppeteer",
-    "selenium",
-    "captcha",
-    "cloudflare",
-    "proxy",
-    "scraping",
-    "browser",
-    "session",
-    "blocked",
-    "broken",
-    "fails",
-  ];
+    .replace(/https?:\/\//, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
 
-  return markdown
-    .split(/\n+/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => line.length >= 70 && line.length <= 360)
-    .filter((line) => {
-      const lower = line.toLowerCase();
-      return sourceTerms.some((term) => lower.includes(term));
-    })
-    .filter(dedupeLines);
+  return `${source}-${compact || index + 1}`;
 }
 
-function normalizeLinks(links: unknown[], fallbackUrl: string): string[] {
-  return links
-    .map((link) => {
-      if (typeof link === "string") return link;
-      if (typeof link !== "object" || link === null) return "";
-
-      const record = link as Record<string, unknown>;
-      return typeof record.url === "string"
-        ? record.url
-        : typeof record.href === "string"
-          ? record.href
-          : "";
-    })
-    .filter((link) => link.startsWith("http") && link !== fallbackUrl);
+function firstMeaningfulText(values: string[]): string {
+  return values
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .find((value) => value.length > 0) ?? "";
 }
 
-function extractTitle(candidate: string, fallback: string): string {
-  const withoutMarkdown = candidate.replace(/^\s*#+\s*/, "").trim();
-  const firstSentence = withoutMarkdown.split(/[.!?]/)[0]?.trim();
-  return (firstSentence || fallback).slice(0, 140);
+function detectGithubRepo(value: string): string | undefined {
+  const match = value.match(/github\.com\/([^/\s]+\/[^/\s#?]+)/i);
+  if (match) return match[1].replace(/\.git$/, "");
+
+  const apiMatch = value.match(/^([^/\s]+\/[^/\s#?]+)$/);
+  return apiMatch?.[1];
+}
+
+function isEcosystemRepo(repo: string): boolean {
+  const normalized = repo.toLowerCase();
+  return githubEcosystemRepos.some((candidate) =>
+    normalized.includes(candidate.toLowerCase())
+  );
 }
 
 function stripHtml(value: string): string {
   return value
-    .replace(/<[^>]*>/g, " ")
+    .replace(/<[^>]+>/g, " ")
     .replace(/&quot;/g, '"')
     .replace(/&#x27;/g, "'")
     .replace(/&amp;/g, "&")
@@ -284,19 +334,11 @@ function stripHtml(value: string): string {
     .trim();
 }
 
-function detectGithubRepo(url: string): string | undefined {
-  const match = url.match(/github\.com\/([^/\s]+\/[^/\s?#]+)/i);
-  return match?.[1];
-}
-
-function isEcosystemRepo(repo: string): boolean {
-  const normalizedRepo = repo.toLowerCase();
-
-  return githubEcosystemRepos.some(
-    (ecosystemRepo) => ecosystemRepo.toLowerCase() === normalizedRepo
+function stripMarkdown(value: string): string {
+  return stripHtml(
+    value
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
   );
-}
-
-function dedupeLines(line: string, index: number, lines: string[]): boolean {
-  return lines.findIndex((candidate) => candidate === line) === index;
 }
