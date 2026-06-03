@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType, FormEvent } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Bot,
   Leaf,
@@ -17,7 +17,9 @@ import {
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { SourceSelector } from "@/components/SourceSelector";
 import { buildDemoResult } from "@/lib/demo-data";
-import type { AnalysisMode, MineResult, SignalSource } from "@/lib/types";
+import { streamMineRun } from "@/lib/client/run-stream";
+import type { MineRunEvent } from "@/lib/run-events";
+import type { AnalysisMode, MineRequest, MineResult, SignalSource } from "@/lib/types";
 
 const analysisModes: Array<{
   id: AnalysisMode;
@@ -56,6 +58,8 @@ export default function Home() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [runEvents, setRunEvents] = useState<MineRunEvent[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
   const subredditValidation = validateSubreddits(redditTargets);
   const canSubmit = !isLoading && subredditValidation.invalid.length === 0;
 
@@ -74,31 +78,42 @@ export default function Home() {
     event.preventDefault();
     setIsLoading(true);
     setError("");
+    setRunEvents([]);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const mineRequest: MineRequest = {
+      query,
+      sources,
+      maxResults,
+      analysisMode,
+      openWebTargets: {
+        includeBroadWeb,
+        redditSubreddits: subredditValidation.valid,
+      },
+    };
 
     try {
-      const response = await fetch("/api/mine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query,
-          sources,
-          maxResults,
-          analysisMode,
-          openWebTargets: {
-            includeBroadWeb,
-            redditSubreddits: subredditValidation.valid,
-          },
-        }),
+      await streamMineRun({
+        request: mineRequest,
+        signal: controller.signal,
+        onEvent: (runEvent) => {
+          setRunEvents((events) => [...events, runEvent]);
+
+          if (runEvent.type === "run_completed") {
+            setResult(runEvent.result);
+          }
+
+          if (runEvent.type === "run_failed") {
+            setError(runEvent.message);
+          }
+        },
       });
-
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to mine growth signals.");
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        setError("Run cancelled. Partial trace is preserved below.");
+        return;
       }
 
-      setResult(payload);
-    } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
@@ -106,7 +121,12 @@ export default function Home() {
       );
     } finally {
       setIsLoading(false);
+      abortRef.current = null;
     }
+  }
+
+  function cancelRun() {
+    abortRef.current?.abort();
   }
 
   return (
@@ -262,8 +282,9 @@ export default function Home() {
 
             {/* Submit */}
             <button
-              type="submit"
-              disabled={!canSubmit}
+              type={isLoading ? "button" : "submit"}
+              onClick={isLoading ? cancelRun : undefined}
+              disabled={!isLoading && !canSubmit}
               className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-accent/50 bg-accent px-5 text-[13px] font-black text-background shadow-[0_0_24px_rgba(124,255,178,0.18)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? (
@@ -271,7 +292,7 @@ export default function Home() {
               ) : (
                 <Bot size={15} />
               )}
-              {isLoading ? "Analyzing..." : "Run Analysis"}
+              {isLoading ? "Cancel Run" : "Run Analysis"}
             </button>
           </div>
 
@@ -317,6 +338,7 @@ export default function Home() {
             includeBroadWeb,
             redditTargets: subredditValidation.valid,
           }}
+          runEvents={runEvents}
         />
       </main>
     </div>

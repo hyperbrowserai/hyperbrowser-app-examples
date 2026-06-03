@@ -78,18 +78,18 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Enter a developer-market pain or topic, such as `Playwright captcha failures`.
 2. Select public sources: Hacker News, GitHub Issues, and open web via Hyperbrowser.
-3. HyperGrowth builds a source-routed query plan. In lean, balanced, or full mode, an LLM can generate source-specific search queries and source weights; otherwise the deterministic static plan is used.
+3. HyperGrowth runs a bounded autonomous research loop. In lean, balanced, or full mode, an LLM can plan source-specific searches; otherwise a deterministic source-aware planner is used.
 4. Source adapters collect `EvidenceCandidate` records instead of final signals:
    - GitHub uses the Issues API, optionally with `GITHUB_TOKEN`, and enriches issue bodies plus a small comment sample.
-   - Hacker News uses only the Algolia API for stories and comments. It does not scrape the Algolia UI, so `no stories matching` is treated as no evidence.
+   - Hacker News uses only the Algolia API for stories and comments. Queries are kept terse because Algolia performs better on keyword searches such as `playwright captcha` than on long natural-language prompts.
    - Hyperbrowser Search discovers broad open-web results across blogs, docs, workaround posts, and pages without clean APIs.
    - Reddit is not a direct source. Configured subreddits become `site:reddit.com/r/...` Hyperbrowser Search targets, and only canonical thread URLs are eligible for Fetch.
 5. A deterministic evidence-quality gate rejects login pages, block walls, empty-result pages, navigation chrome, thin snippets, and weak query-overlap candidates before scoring.
-6. Full or higher LLM budgets can run a search-gap check when candidate volume is thin, adding one extra source-specific search.
-7. Balanced and full modes can run LLM candidate triage before enrichment so Hyperbrowser Fetch is spent on likely evidence.
-8. Hyperbrowser Fetch enriches selected canonical URLs, especially open-web results returned by Hyperbrowser Search.
+6. The research critic chooses which Hyperbrowser Search results are worth fetching. In LLM-enabled modes this is contextual; otherwise it falls back to deterministic URL/snippet guards.
+7. Hyperbrowser Fetch enriches selected canonical URLs, especially open-web results returned by Hyperbrowser Search.
    Reddit permalinks use Hyperbrowser stealth mode and are rejected if Fetch returns a login, search, landing, or block page.
-9. Full mode can use LLM evidence extraction to produce grounded quotes from candidate metadata and fetched markdown. The fallback extractor remains deterministic.
+8. The evidence judge runs after Fetch, not before it. It accepts only grounded developer-authored pain, workaround, failure, bug, or buying/infra evidence. Block walls, search UI, cookie banners, generic marketing pages, and platform access failures are never promoted to signals.
+9. LLM-enabled modes can use contextual evidence judgment to choose quotes from fetched markdown and structured API results. The fallback extractor remains deterministic, and structured GitHub/HN evidence can still survive if the LLM drops it.
 10. HyperGrowth normalizes extracted raw evidence into `PainSignal` records with source URL, canonical URL, quote, author, timestamp, engagement, evidence kind, repository, matched terms, tools mentioned, category, and urgency.
 11. The scoring engine assigns deterministic scores for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, confidence, and total signal value.
 12. The dedupe engine compresses near-duplicate evidence using Jaccard similarity.
@@ -106,13 +106,13 @@ HyperGrowth treats growth research as an evidence-to-action pipeline:
 
 ```txt
 user query
--> source-routed query plan
+-> bounded autonomous research plan
 -> source-native API collectors plus Hyperbrowser Search
 -> evidence candidates
--> quality gate
--> optional LLM candidate triage
+-> pre-fetch quality gate
+-> optional LLM search-result critic
 -> Hyperbrowser Fetch enrichment for selected URLs
--> optional LLM evidence extraction
+-> post-fetch evidence judge
 -> normalized pain signals
 -> deterministic signal scores
 -> deduped evidence groups

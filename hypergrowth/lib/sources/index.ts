@@ -210,8 +210,9 @@ async function fetchHackerNewsHits(
       id: candidateId("hackernews", hnUrl, index),
       source: "hackernews" as const,
       discoveryMethod: "api" as const,
-      sourceUrl: url,
-      canonicalUrl: hit.url || hit.story_url || hnUrl,
+      sourceUrl: hnUrl,
+      canonicalUrl:
+        tag === "comment" ? hnUrl : hit.url || hit.story_url || hnUrl,
       title,
       snippet: firstMeaningfulText([text, title]),
       body: text,

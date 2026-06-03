@@ -81,6 +81,21 @@ export type SourceBudgetPolicy = {
   requestTimeoutMs: number;
 };
 
+export type SourceDebugSummary = {
+  source: SignalSource;
+  rawCandidates: number;
+  qualityAccepted: number;
+  qualityRejected: number;
+  evidenceAccepted: number;
+  finalSignals: number;
+  rejectionFlags: Partial<Record<EvidenceQualityFlag, number>>;
+  sampleAcceptedTitles: string[];
+  sampleRejected: Array<{
+    title: string;
+    flags: EvidenceQualityFlag[];
+  }>;
+};
+
 export type RawSignal = {
   source: SignalSource;
   sourceUrl: string;
@@ -107,6 +122,7 @@ export type EvidenceQualityFlag =
   | "blocked"
   | "no_results"
   | "navigation_chrome"
+  | "promotional"
   | "too_short"
   | "weak_query_overlap"
   | "thin_snippet";
@@ -307,6 +323,7 @@ export type MineMetadata = {
   queryPlan?: QueryPlan;
   executedSearches?: ExecutedSearch[];
   searchDiagnostics?: SearchDiagnostic[];
+  sourceDebug?: SourceDebugSummary[];
   timings?: PhaseTiming[];
   llm: LLMUsageMetadata;
 };
