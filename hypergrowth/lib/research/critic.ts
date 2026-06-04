@@ -30,7 +30,7 @@ export async function selectFetchTargets({
   allowLLM: boolean;
 }): Promise<{
   targets: FetchTarget[];
-  mode: "disabled" | "used" | "fallback";
+  mode: "disabled" | "used" | "fallback" | "deterministic";
   callsAttempted: number;
   failureReason?: string;
 }> {
@@ -49,7 +49,7 @@ export async function selectFetchTargets({
   if (!allowLLM) {
     return {
       targets: deterministicTargets(fetchable, maxTargets),
-      mode: "disabled",
+      mode: "deterministic",
       callsAttempted: 0,
     };
   }

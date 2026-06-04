@@ -42,7 +42,7 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {sources.map((source) => {
         const selected = value.includes(source.id);
 
@@ -51,7 +51,7 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
             key={source.id}
             type="button"
             onClick={() => toggle(source.id)}
-            className={`inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${
+            className={`inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition ${
               selected
                 ? `${source.selectedBorder} ${source.selectedBg} ${source.selectedText}`
                 : "border-line bg-white/[0.03] text-muted hover:border-line hover:text-foreground"

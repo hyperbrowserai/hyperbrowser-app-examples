@@ -130,34 +130,34 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <main className="relative z-10 mx-auto flex w-full max-w-[1480px] flex-col gap-3 px-3 py-3 sm:px-4 lg:px-6">
+      <main className="relative z-10 mx-auto flex w-full max-w-[1480px] flex-col gap-3 px-3 py-3 sm:px-5 lg:px-6">
         {/* Command Bar */}
         <form
           onSubmit={handleSubmit}
           className="rounded-lg border border-line bg-panel/80 shadow-[0_16px_64px_rgba(0,0,0,0.32)] backdrop-blur-xl"
         >
           {/* Row 1: Branding, query, discovery, and enrichment */}
-          <div className="flex flex-col gap-3 border-b border-line/60 px-4 py-3 lg:flex-row lg:items-center">
+          <div className="flex flex-col gap-4 border-b border-line/60 px-4 py-3 min-[1120px]:flex-row min-[1120px]:flex-wrap min-[1120px]:items-center">
             {/* Branding */}
             <div className="flex shrink-0 items-center gap-2.5">
               <span className="grid size-9 place-items-center rounded-lg border border-accent/40 bg-accent/12 text-accent shadow-[0_0_24px_rgba(124,255,178,0.15)]">
                 <Radar size={18} />
               </span>
               <div>
-                <h1 className="text-base font-black tracking-tight">
+                <h1 className="text-lg font-black tracking-tight">
                   HyperGrowth
                 </h1>
-                <p className="text-[11px] leading-none text-muted">
+                <p className="text-xs leading-snug text-muted">
                   Developer Growth Intelligence
                 </p>
               </div>
             </div>
 
-            <div className="mx-2 hidden h-8 w-px bg-line/60 lg:block" />
+            <div className="mx-2 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
 
             {/* Query */}
-            <label className="block min-w-0 flex-1">
-              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+            <label className="block min-w-0 flex-1 min-[1120px]:basis-[340px]">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
                 Query
               </span>
               <div className="relative">
@@ -168,35 +168,35 @@ export default function Home() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  className="h-9 w-full rounded-md border border-line bg-black/30 pl-8 pr-3 text-[13px] text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60 focus:bg-black/40"
+                  className="h-11 w-full rounded-md border border-line bg-black/30 pl-9 pr-3 text-sm text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60 focus:bg-black/40"
                   placeholder="e.g. browser automation blocked by captchas"
                 />
               </div>
             </label>
 
-            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
 
             {/* Discovery Engine */}
             <div className="shrink-0">
-              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
                 Discovery
               </span>
-              <div className="inline-flex h-8 items-center gap-2 rounded-full border border-source-web/50 bg-source-web/12 px-3 text-xs font-semibold text-source-web">
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-source-web/50 bg-source-web/12 px-3 text-sm font-semibold text-source-web">
                 <span className="grid size-5 place-items-center rounded bg-white/[0.04]">
                   <SourceIcon source="hyperbrowser" size={14} />
                 </span>
                 Hyperbrowser
-                <span className="rounded-full border border-source-web/30 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-source-web/80">
+                <span className="rounded-full border border-source-web/30 px-1.5 py-0.5 text-xs uppercase tracking-wide text-source-web/80">
                   Search + Fetch
                 </span>
               </div>
             </div>
 
-            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
 
             {/* Enrichment Sources */}
-            <div className="shrink-0">
-              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+            <div className="min-w-0 min-[1120px]:flex-[1_1_280px]">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
                 Enrichment
               </span>
               <SourceSelector value={sources} onChange={setSources} />
@@ -204,22 +204,22 @@ export default function Home() {
           </div>
 
           {/* Row 2: Hyperbrowser targets, analysis mode, max results, submit */}
-          <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-end">
+          <div className="flex flex-col gap-4 px-4 py-3 min-[1120px]:flex-row min-[1120px]:flex-wrap min-[1120px]:items-end">
             {/* Open-web targets steer Hyperbrowser discovery. */}
-            <div className="flex min-w-0 flex-1 items-end gap-3">
-              <label className="block min-w-0 flex-1">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
-                  Open-Web Targets
+            <div className="flex min-w-0 flex-1 flex-col gap-3 md:flex-row md:items-end min-[1120px]:basis-[420px]">
+              <label className="block min-w-0 flex-1 min-[1120px]:basis-[260px]">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
+                  Optional Web Targets
                 </span>
                 <input
                   value={redditTargets}
                   onChange={(event) => setRedditTargets(event.target.value)}
-                  className="h-9 w-full rounded-md border border-line bg-black/30 px-3 text-[13px] text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60"
-                  placeholder="webscraping, playwright, automation"
+                  className="h-11 w-full rounded-md border border-line bg-black/30 px-3 text-sm text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60"
+                  placeholder="stackoverflow, browser docs, r/webscraping"
                 />
               </label>
 
-              <label className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-line bg-black/20 px-3 text-[11px] font-semibold text-muted transition hover:border-accent/30">
+              <label className="inline-flex h-11 shrink-0 items-center gap-2 rounded-md border border-line bg-black/20 px-3 text-xs font-semibold text-muted transition hover:border-accent/30">
                 <input
                   type="checkbox"
                   checked={includeBroadWeb}
@@ -232,14 +232,14 @@ export default function Home() {
               </label>
             </div>
 
-            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
 
             {/* Analysis Mode */}
             <div className="shrink-0">
-              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
                 Analysis Mode
               </span>
-              <div className="flex h-9 overflow-hidden rounded-md border border-line">
+              <div className="flex h-11 overflow-hidden rounded-md border border-line">
                 {analysisModes.map((mode) => {
                   const selected = analysisMode === mode.id;
                   const ModeIcon = mode.icon;
@@ -249,7 +249,7 @@ export default function Home() {
                       key={mode.id}
                       type="button"
                       onClick={() => setAnalysisMode(mode.id)}
-                      className={`flex items-center gap-1 px-3 text-[12px] font-semibold transition ${
+                      className={`flex items-center gap-1.5 px-3 text-sm font-semibold transition ${
                         selected
                           ? "bg-accent/15 text-accent shadow-[inset_0_0_12px_rgba(124,255,178,0.08)]"
                           : "bg-black/20 text-muted hover:bg-white/[0.04] hover:text-foreground"
@@ -263,18 +263,18 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
 
             {/* Max Results */}
             <div className="shrink-0">
-              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
                 Max Results
               </span>
-              <div className="flex h-9 items-center rounded-md border border-line bg-black/20">
+              <div className="flex h-11 items-center rounded-md border border-line bg-black/20">
                 <button
                   type="button"
                   onClick={() => cycleMaxResults(-1)}
-                  className="grid size-9 place-items-center text-muted transition hover:text-foreground"
+                  className="grid size-11 place-items-center text-muted transition hover:text-foreground"
                 >
                   <Minus size={14} />
                 </button>
@@ -284,21 +284,21 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => cycleMaxResults(1)}
-                  className="grid size-9 place-items-center text-muted transition hover:text-foreground"
+                  className="grid size-11 place-items-center text-muted transition hover:text-foreground"
                 >
                   <Plus size={14} />
                 </button>
               </div>
             </div>
 
-            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
 
             {/* Submit */}
             <button
               type={isLoading ? "button" : "submit"}
               onClick={isLoading ? cancelRun : undefined}
               disabled={!isLoading && !canSubmit}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-accent/50 bg-accent px-5 text-[13px] font-black text-background shadow-[0_0_24px_rgba(124,255,178,0.18)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-accent/50 bg-accent px-5 text-sm font-black text-background shadow-[0_0_24px_rgba(124,255,178,0.18)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? (
                 <Loader2 className="animate-spin" size={15} />
@@ -315,7 +315,7 @@ export default function Home() {
               {subredditValidation.valid.map((subreddit) => (
                 <span
                   key={subreddit}
-                  className="rounded-full border border-source-web/25 bg-source-web/10 px-2 py-0.5 text-[10px] font-semibold text-source-web"
+                  className="rounded-full border border-source-web/25 bg-source-web/10 px-2 py-0.5 text-xs font-semibold text-source-web"
                 >
                   r/{subreddit}
                 </span>
@@ -323,7 +323,7 @@ export default function Home() {
               {subredditValidation.invalid.map((subreddit) => (
                 <span
                   key={subreddit}
-                  className="rounded-full border border-danger/30 bg-danger/10 px-2 py-0.5 text-[10px] font-semibold text-danger"
+                  className="rounded-full border border-danger/30 bg-danger/10 px-2 py-0.5 text-xs font-semibold text-danger"
                 >
                   invalid: {subreddit}
                 </span>

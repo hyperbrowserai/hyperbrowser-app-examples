@@ -129,9 +129,9 @@ export function ResultsDashboard({
   const totalSignals = sourceMix.reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <section className={`space-y-3 ${isLoading ? "opacity-70" : ""}`}>
+    <section className={`space-y-4 ${isLoading ? "opacity-70" : ""}`}>
       {/* Metrics Strip */}
-      <div className="flex items-stretch overflow-x-auto rounded-lg border border-line bg-panel/70 backdrop-blur-xl">
+      <div className="grid gap-px overflow-hidden rounded-lg border border-line bg-line/70 backdrop-blur-xl sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <MetricCell
           icon={<RadioTower size={13} className="text-accent" />}
           label="Data Mode"
@@ -144,7 +144,6 @@ export function ResultsDashboard({
             </span>
           }
         />
-        <MetricDivider />
         <MetricCell
           icon={<ShieldCheck size={13} className="text-accent-blue" />}
           label="Confidence"
@@ -176,28 +175,24 @@ export function ResultsDashboard({
             </span>
           }
         />
-        <MetricDivider />
         <MetricCell
           icon={<BarChart3 size={13} className="text-accent-blue" />}
           label="Signals"
           value={String(result.signals.length)}
           valueClass="text-accent-blue"
         />
-        <MetricDivider />
         <MetricCell
           icon={<Layers3 size={13} className="text-accent-purple" />}
           label="Clusters"
           value={String(result.clusters.length)}
           valueClass="text-accent-purple"
         />
-        <MetricDivider />
         <MetricCell
           icon={<Zap size={13} className="text-accent-orange" />}
           label="Growth Plays"
           value={String(result.growthPlays.length)}
           valueClass="text-accent-orange"
         />
-        <MetricDivider />
         <MetricCell
           icon={<Clock3 size={13} className="text-muted" />}
           label="Last Run"
@@ -215,7 +210,7 @@ export function ResultsDashboard({
       />
 
       {/* Three-Column Content Grid */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.22fr)_minmax(0,1fr)]">
         {/* Column 1: Growth Brief */}
         <Panel
           icon={<Target size={15} className="text-accent" />}
@@ -224,29 +219,29 @@ export function ResultsDashboard({
         >
           <div className="space-y-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-accent">
+              <p className="text-xs font-bold uppercase tracking-wide text-accent">
                 Top Finding
               </p>
-              <h2 className="mt-1.5 text-[12px] font-black leading-snug tracking-tight text-foreground">
+              <h2 className="mt-2 text-base font-black leading-snug tracking-tight text-foreground">
                 {brief?.topFinding ?? "No strong finding yet."}
               </h2>
             </div>
 
-            <p className="text-[12px] leading-5 text-muted">
+            <p className="text-sm leading-6 text-muted">
               {brief?.executiveSummary ??
                 "HyperGrowth will summarize clusters and expected-value growth plays here."}
             </p>
 
-            <p className="inline-flex items-center gap-1.5 rounded-full border border-source-web/25 bg-source-web/8 px-2 py-1 text-[10px] font-semibold text-source-web">
+            <p className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-source-web/25 bg-source-web/8 px-2.5 py-1 text-xs font-semibold text-source-web">
               <SourceIcon source="hyperbrowser" size={12} />
               Hyperbrowser discovery and page fetch, enriched by selected APIs
             </p>
 
             <div className="rounded-md border border-accent/25 bg-accent/8 px-3 py-2.5">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-accent">
+              <p className="text-xs font-bold uppercase tracking-wide text-accent">
                 Recommended Next Step
               </p>
-              <p className="mt-1 text-[12px] leading-5 text-foreground">
+              <p className="mt-1.5 text-sm leading-6 text-foreground">
                 {brief?.recommendedNextStep ??
                   "Run a live query to generate a recommended next step."}
               </p>
@@ -256,7 +251,7 @@ export function ResultsDashboard({
               {sourceMix.map((item) => (
                 <span
                   key={item.source}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold ${sourceBadgeClass[item.source]}`}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${sourceBadgeClass[item.source]}`}
                 >
                   <span className={`size-1.5 rounded-full ${sourceDotClass[item.source]}`} />
                   {sourceLabels[item.source]} {item.count}
@@ -265,7 +260,7 @@ export function ResultsDashboard({
               {brief?.caveats.slice(0, 2).map((caveat) => (
                 <span
                   key={caveat}
-                  className="inline-flex max-w-full items-center truncate rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-bold uppercase text-warning"
+                  className="inline-flex max-w-full items-center truncate rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-xs font-bold uppercase text-warning"
                 >
                   {caveat}
                 </span>
@@ -281,7 +276,7 @@ export function ResultsDashboard({
           accentColor="border-t-accent-orange"
           headerRight={
             result.growthPlays.length > 0 ? (
-              <span className="text-[11px] font-semibold text-muted">
+              <span className="text-xs font-semibold text-muted">
                 Showing {Math.min(result.growthPlays.length, 6)} of{" "}
                 {result.growthPlays.length}
               </span>
@@ -293,24 +288,24 @@ export function ResultsDashboard({
               {result.growthPlays.slice(0, 6).map((play, index) => (
                 <div
                   key={play.id}
-                  className="flex items-center gap-3 border-b border-line/40 px-1 py-2.5 last:border-b-0 hover:bg-white/[0.02] transition"
+                  className="flex items-center gap-3 border-b border-line/40 px-1 py-3 transition last:border-b-0 hover:bg-white/[0.02]"
                 >
-                  <span className="grid size-6 shrink-0 place-items-center rounded text-[11px] font-black text-accent-orange">
+                  <span className="grid size-7 shrink-0 place-items-center rounded text-xs font-black text-accent-orange">
                     #{index + 1}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-semibold text-foreground">
+                    <p className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">
                       {play.title}
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${channelBadgeClass[play.channel]}`}
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-bold uppercase ${channelBadgeClass[play.channel]}`}
                   >
                     {channelLabels[play.channel]}
                   </span>
-                  <span className="shrink-0 text-right text-[11px] font-mono text-muted">
+                  <span className="shrink-0 text-right text-xs font-mono text-muted">
                     {play.supportingSignalIds.length}
-                    <span className="ml-0.5 text-[9px] text-muted/60">ev</span>
+                    <span className="ml-0.5 text-xs text-muted/60">ev</span>
                   </span>
                 </div>
               ))}
@@ -327,7 +322,7 @@ export function ResultsDashboard({
           accentColor="border-t-accent-purple"
           headerRight={
             result.clusters.length > 0 ? (
-              <span className="text-[11px] font-semibold text-muted">
+              <span className="text-xs font-semibold text-muted">
                 Showing {Math.min(result.clusters.length, 5)} of{" "}
                 {result.clusters.length}
               </span>
@@ -337,7 +332,7 @@ export function ResultsDashboard({
           {result.clusters.length ? (
             <div className="space-y-0">
               {/* Table header */}
-              <div className="flex items-center gap-2 border-b border-line/50 pb-2 text-[10px] font-bold uppercase tracking-wider text-muted">
+              <div className="flex items-center gap-2 border-b border-line/50 pb-2 text-xs font-bold uppercase tracking-wide text-muted">
                 <span className="w-5" />
                 <span className="min-w-0 flex-1">Cluster</span>
                 <span className="w-16 text-center">Urgency</span>
@@ -396,13 +391,27 @@ function RunTrace({
         queries.map((query) => ({
           source: source as SignalSource,
           query,
+          reason: "expanded" as const,
         }))
       )
     : executedSearches.map((search) => ({
         source: search.source,
         query: search.query,
+        reason: search.reason,
       }));
   const llm = result.metadata.llm;
+  const waves =
+    plan?.waves?.length
+      ? plan.waves
+      : visibleQueries.length
+        ? [
+            {
+              index: 1,
+              reason: "Executed source-specific discovery and enrichment.",
+              searches: visibleQueries,
+            },
+          ]
+        : [];
 
   if (isLoading) {
     return (
@@ -411,17 +420,17 @@ function RunTrace({
         title="Research Trace"
         accentColor="border-t-accent-blue"
         headerRight={
-          <span className="text-[11px] font-semibold text-accent-blue">
+          <span className="text-xs font-semibold text-accent-blue">
             Hyperbrowser-first run
           </span>
         }
       >
         <div className="grid gap-3 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
           <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted">
               Active request
             </p>
-            <p className="mt-1 line-clamp-2 text-[12px] font-semibold leading-5 text-foreground">
+            <p className="mt-1.5 line-clamp-2 text-sm font-semibold leading-6 text-foreground">
               {activeRun?.query ?? result.query}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -429,7 +438,7 @@ function RunTrace({
                 (source) => (
                   <span
                     key={source}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceBadgeClass[source]}`}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${sourceBadgeClass[source]}`}
                   >
                     <SourceIcon source={source} size={12} />
                     {sourceLongLabels[source]}
@@ -438,7 +447,7 @@ function RunTrace({
               )}
             </div>
             {activeRun?.redditTargets.length ? (
-              <p className="mt-2 text-[10px] leading-4 text-muted">
+              <p className="mt-2 text-xs leading-5 text-muted">
                 Reddit targets via Hyperbrowser:{" "}
                 {activeRun.redditTargets.map((target) => `r/${target}`).join(", ")}
               </p>
@@ -451,7 +460,7 @@ function RunTrace({
                 key={phase.label}
                 className="rounded-md border border-line/50 bg-black/20 px-3 py-2"
               >
-                <span className="flex items-center gap-2 text-[11px] font-bold text-foreground">
+                <span className="flex items-center gap-2 text-xs font-bold text-foreground">
                   {index === 0 ? (
                     <span className="size-2 rounded-full bg-accent animate-pulse" />
                   ) : (
@@ -459,7 +468,7 @@ function RunTrace({
                   )}
                   {phase.label}
                 </span>
-                <p className="mt-1 text-[10px] leading-4 text-muted">
+                <p className="mt-1 text-xs leading-5 text-muted">
                   {phase.detail}
                 </p>
               </div>
@@ -480,80 +489,104 @@ function RunTrace({
       title="Research Trace"
       accentColor="border-t-accent-blue"
       headerRight={
-        <span className="text-[11px] font-semibold text-muted">
+        <span className="text-xs font-semibold text-muted">
           Final metadata
         </span>
       }
     >
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,0.95fr)]">
-        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
             <Search size={12} className="text-accent-blue" />
-            Discovery Plan
+            Research Waves
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-3 max-h-[22rem] space-y-3 overflow-y-auto pr-1">
             {plan ? (
-              <span className="rounded-full border border-accent-blue/30 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-semibold text-accent-blue">
+              <span className="inline-flex rounded-full border border-accent-blue/30 bg-accent-blue/10 px-2.5 py-1 text-xs font-semibold text-accent-blue">
                 {formatStrategy(plan.strategy)}
               </span>
             ) : null}
-            {visibleQueries.slice(0, 8).map((item) => (
-              <span
-                key={`${item.source}-${item.query}`}
-                className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceBadgeClass[item.source]}`}
-                title={item.query}
+            {waves.map((wave) => (
+              <div
+                key={wave.index}
+                className="rounded-md border border-line/45 bg-white/[0.025] px-3 py-2.5"
               >
-                <SourceIcon source={item.source} size={11} />
-                <span className="max-w-[220px] truncate">{item.query}</span>
-              </span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-foreground">
+                    Wave {wave.index}
+                  </p>
+                  <span className="text-xs text-muted">
+                    {wave.searches.length} searches
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  {wave.reason}
+                </p>
+                <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+                  {wave.searches.map((item) => (
+                    <span
+                      key={`${wave.index}-${item.source}-${item.query}`}
+                      className={`inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${sourceBadgeClass[item.source]}`}
+                      title={item.query}
+                    >
+                      <SourceIcon source={item.source} size={12} />
+                      <span className="min-w-0 truncate">{item.query}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
-          {plan?.rationale.length ? (
-            <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-muted">
-              {plan.rationale.join(" ")}
+          {plan?.stopReason ? (
+            <p className="mt-3 rounded-md border border-accent/20 bg-accent/8 px-3 py-2 text-xs leading-5 text-muted">
+              {plan.stopReason}
             </p>
           ) : null}
         </div>
 
-        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+        <div className="grid gap-4">
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
             <Network size={12} className="text-accent-orange" />
             Discovery & Enrichment
           </div>
-          <div className="mt-1.5 space-y-1">
+          <div className="mt-2 max-h-[18rem] space-y-1.5 overflow-y-auto pr-1">
             {searches.length ? (
-              searches.slice(0, 5).map((search) => (
+              searches.map((search) => (
                 <div
                   key={`${search.source}-${search.query}`}
-                  className="flex items-center justify-between gap-2 border-b border-line/40 py-1 last:border-b-0"
+                  className="flex items-start justify-between gap-3 border-b border-line/40 py-1.5 last:border-b-0"
                 >
-                  <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="flex min-w-0 items-start gap-1.5">
                     <SourceIcon source={search.source} size={12} />
                     <span
-                      className={`truncate text-[11px] font-semibold ${sourceTextClass[search.source]}`}
+                      className={`min-w-0 text-xs font-semibold leading-4 ${sourceTextClass[search.source]}`}
                     >
                       {sourceLongLabels[search.source]}
+                      <span className="block truncate font-normal text-muted">
+                        {search.query}
+                      </span>
                     </span>
                   </span>
-                  <span className="shrink-0 text-[10px] text-muted">
+                  <span className="shrink-0 text-right text-xs text-muted">
                     {formatCandidateCounts(search)}
                   </span>
                 </div>
               ))
             ) : (
-              <p className="py-2 text-[11px] text-muted">
+              <p className="py-2 text-xs text-muted">
                 No source diagnostics were returned.
               </p>
             )}
           </div>
         </div>
 
-        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
             <Brain size={12} className="text-accent-purple" />
             Intelligence
           </div>
-          <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
             <TraceMode label="Queries" value={llm.queryExpansionMode} />
             <TraceMode label="Triage" value={llm.candidateTriageMode} />
             <TraceMode label="Extract" value={llm.evidenceExtractionMode} />
@@ -561,11 +594,12 @@ function RunTrace({
             <TraceMode label="Judge" value={llm.judgmentMode} />
             <TraceMode label="Brief" value={llm.synthesisMode} />
           </div>
-          <p className="mt-2 flex items-center gap-1.5 text-[10px] text-muted">
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted">
             <Timer size={11} />
             {formatTimingShort(result.metadata.timings)} total,{" "}
             {llm.callsAttempted} LLM calls attempted
           </p>
+        </div>
         </div>
       </div>
     </Panel>
@@ -599,7 +633,7 @@ function LiveRunTrace({
       accentColor={failed ? "border-t-danger" : "border-t-accent-blue"}
       headerRight={
         <span
-          className={`text-[11px] font-semibold ${
+          className={`text-xs font-semibold ${
             failed ? "text-danger" : isLoading ? "text-accent-blue" : "text-success"
           }`}
         >
@@ -607,10 +641,10 @@ function LiveRunTrace({
         </span>
       }
     >
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,1fr)]">
-        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+            <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
               <Route size={12} className="text-accent-blue" />
               Current Phase
             </span>
@@ -618,17 +652,17 @@ function LiveRunTrace({
               <span className="size-2 rounded-full bg-accent animate-pulse" />
             ) : null}
           </div>
-          <p className="mt-2 text-[12px] font-semibold text-foreground">
+          <p className="mt-2 text-sm font-semibold text-foreground">
             {latestPhase?.label ?? "Starting run"}
           </p>
-          <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted">
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
             {activeRun?.query ?? "Waiting for request details."}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {phases.slice(-6).map((phase, index) => (
               <span
                 key={`${phase.phase}-${index}`}
-                className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-semibold text-accent-blue"
+                className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-xs font-semibold text-accent-blue"
               >
                 {phase.label}
               </span>
@@ -636,28 +670,28 @@ function LiveRunTrace({
           </div>
         </div>
 
-        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
             <Search size={12} className="text-accent-orange" />
             Discovery & Enrichment
           </div>
-          <div className="mt-1.5 space-y-1">
+          <div className="mt-2 max-h-[18rem] space-y-1.5 overflow-y-auto pr-1">
             {sourceResults.length ? (
-              sourceResults.slice(-5).map((event, index) => (
+              sourceResults.map((event, index) => (
                 <div
                   key={`${event.source}-${event.query}-${index}`}
-                  className="flex items-center justify-between gap-2 border-b border-line/40 py-1 last:border-b-0"
+                  className="flex items-start justify-between gap-3 border-b border-line/40 py-1.5 last:border-b-0"
                 >
-                  <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="flex min-w-0 items-start gap-1.5">
                     <SourceIcon source={event.source} size={12} />
                     <span
-                      className={`truncate text-[11px] font-semibold ${sourceTextClass[event.source]}`}
+                      className={`min-w-0 truncate text-xs font-semibold leading-4 ${sourceTextClass[event.source]}`}
                     >
                       {event.query}
                     </span>
                   </span>
                   <span
-                    className={`shrink-0 text-[10px] ${
+                    className={`shrink-0 text-xs ${
                       event.status === "success" ? "text-muted" : "text-danger"
                     }`}
                   >
@@ -668,10 +702,10 @@ function LiveRunTrace({
                 </div>
               ))
             ) : (
-              searches.slice(-5).map((event, index) => (
+              searches.map((event, index) => (
                 <div
                   key={`${event.source}-${event.query}-${index}`}
-                  className="flex items-center gap-1.5 border-b border-line/40 py-1 text-[11px] last:border-b-0"
+                  className="flex items-center gap-1.5 border-b border-line/40 py-1.5 text-xs last:border-b-0"
                 >
                   <SourceIcon source={event.source} size={12} />
                   <span className="truncate text-muted">{event.query}</span>
@@ -681,18 +715,18 @@ function LiveRunTrace({
           </div>
         </div>
 
-        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
             <Brain size={12} className="text-accent-purple" />
             Intelligence
           </div>
-          <div className="mt-1.5 space-y-1">
+          <div className="mt-2 space-y-1.5">
             {llmSteps.slice(-6).map((event, index) => (
               <div
                 key={`${event.step}-${index}`}
-                className="border-b border-line/40 py-1 last:border-b-0"
+                className="border-b border-line/40 py-1.5 last:border-b-0"
               >
-                <div className="flex items-center justify-between gap-2 text-[10px]">
+                <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-foreground">
                     {formatIntelligenceStep(event.step)}
                   </span>
@@ -700,7 +734,7 @@ function LiveRunTrace({
                     {formatTraceMode(event.mode)}
                   </span>
                 </div>
-                <p className="line-clamp-1 text-[10px] text-muted">
+                <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted">
                   {event.summary}
                 </p>
               </div>
@@ -709,7 +743,7 @@ function LiveRunTrace({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <TraceCount
           label="Accepted evidence"
           value={accepted.length}
@@ -721,8 +755,8 @@ function LiveRunTrace({
       </div>
 
       {accepted.length ? (
-        <div className="mt-3 rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-          <div className="mb-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+        <div className="mt-4 rounded-md border border-line/50 bg-black/20 px-3 py-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
             <Quote size={12} className="text-accent-blue" />
             Latest accepted evidence
           </div>
@@ -730,13 +764,13 @@ function LiveRunTrace({
             {accepted.slice(-4).map((event, index) => (
               <div
                 key={`${event.source}-${event.title}-${index}`}
-                className="border-l-2 border-l-accent-blue bg-white/[0.02] px-2 py-1.5"
+                className="border-l-2 border-l-accent-blue bg-white/[0.02] px-3 py-2"
               >
-                <span className="flex items-center gap-1.5 text-[10px] font-semibold text-muted">
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-muted">
                   <SourceIcon source={event.source} size={11} />
                   {event.title}
                 </span>
-                <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-foreground/90">
+                <p className="mt-1.5 line-clamp-2 text-sm leading-6 text-foreground/90">
                   &ldquo;{event.quote}&rdquo;
                 </p>
               </div>
@@ -746,7 +780,7 @@ function LiveRunTrace({
       ) : null}
 
       {failed ? (
-        <div className="mt-3 flex items-start gap-2 rounded-md border border-danger/25 bg-danger/8 px-3 py-2 text-[11px] text-danger">
+        <div className="mt-4 flex items-start gap-2 rounded-md border border-danger/25 bg-danger/8 px-3 py-2 text-xs text-danger">
           <TriangleAlert size={12} className="mt-0.5 shrink-0" />
           {failed.message}
         </div>
@@ -772,11 +806,11 @@ function TraceCount({
   }[tone];
 
   return (
-    <div className={`rounded-md border px-3 py-2 ${toneClass}`}>
-      <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+    <div className={`rounded-md border px-3 py-2.5 ${toneClass}`}>
+      <p className="text-xs font-bold uppercase tracking-wide opacity-80">
         {label}
       </p>
-      <p className="mt-1 text-[16px] font-black">{value}</p>
+      <p className="mt-1 text-xl font-black">{value}</p>
     </div>
   );
 }
@@ -818,7 +852,7 @@ function TraceMode({
   const mode = value ?? "disabled";
   const labelValue = formatTraceMode(mode);
   const modeClass =
-    mode === "used"
+    mode === "used" || mode === "deterministic"
       ? "text-success"
       : mode === "fallback" || mode === "partial"
         ? "text-warning"
@@ -852,6 +886,10 @@ function formatIntelligenceStep(step: string): string {
 function formatTraceMode(mode: string): string {
   if (mode === "partial") {
     return "hybrid";
+  }
+
+  if (mode === "deterministic") {
+    return "deterministic";
   }
 
   return mode;
@@ -892,21 +930,6 @@ function formatCandidateCounts(search: {
   return `${search.rawSignals} raw`;
 }
 
-function formatSearchStatus(search: {
-  status: "success" | "error";
-  acceptedCandidates?: number;
-}) {
-  if (search.status === "error") {
-    return "failed";
-  }
-
-  if (search.acceptedCandidates === 0) {
-    return "0 accepted";
-  }
-
-  return "completed";
-}
-
 /* Evidence Table */
 
 function EvidenceTable({
@@ -918,26 +941,26 @@ function EvidenceTable({
 }) {
   return (
     <div className="rounded-lg border border-line bg-panel/70 backdrop-blur-xl">
-      <div className="flex items-center justify-between border-b border-line/50 px-4 py-2.5">
-        <span className="flex items-center gap-2 text-[13px] font-black uppercase tracking-wide">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/50 px-4 py-3">
+        <span className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
           <Quote size={14} className="text-accent-blue" />
           <span>Evidence</span>
-          <span className="font-mono text-[11px] font-normal text-muted">
+          <span className="font-mono text-xs font-normal text-muted">
             (Quote-First)
           </span>
         </span>
         {signals.length > 0 ? (
-          <span className="text-[11px] font-semibold text-accent-blue">
-            Showing first {Math.min(signals.length, 6)} of {signals.length}
+          <span className="text-xs font-semibold text-accent-blue">
+            Showing all {signals.length}
           </span>
         ) : null}
       </div>
 
       {signals.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[12px]">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead>
-              <tr className="border-b border-line/50 text-[10px] font-bold uppercase tracking-wider text-muted">
+              <tr className="border-b border-line/50 text-xs font-bold uppercase tracking-wide text-muted">
                 <th className="w-1 py-2 pl-0 pr-0 font-bold" />
                 <th className="px-3 py-2 font-bold">Quote</th>
                 <th className="px-3 py-2 font-bold">Source</th>
@@ -947,7 +970,7 @@ function EvidenceTable({
               </tr>
             </thead>
             <tbody>
-              {signals.slice(0, 6).map((signal) => {
+              {signals.map((signal) => {
                 const score = scoreMap.get(signal.id);
                 return (
                   <EvidenceRow
@@ -993,7 +1016,7 @@ function EvidenceRow({
       <td className="w-1 py-3 pl-0 pr-0" />
 
       {/* Quote text */}
-      <td className="max-w-[520px] px-3 py-3.5 align-top">
+      <td className="max-w-[560px] px-4 py-4 align-top">
         <a
           href={signal.url}
           target="_blank"
@@ -1001,14 +1024,14 @@ function EvidenceRow({
           className="group block"
           title={signal.title}
         >
-          <p className="line-clamp-3 text-[12px] leading-5 text-foreground/90 transition group-hover:text-accent-blue">
+          <p className="line-clamp-4 text-sm leading-6 text-foreground/90 transition group-hover:text-accent-blue">
             &ldquo;{signal.quote}&rdquo;
           </p>
         </a>
       </td>
 
       {/* Source + date */}
-      <td className="whitespace-nowrap px-3 py-3 align-top">
+      <td className="whitespace-nowrap px-3 py-4 align-top">
         <a
           href={signal.url}
           target="_blank"
@@ -1018,34 +1041,34 @@ function EvidenceRow({
         >
           <SourceIcon source={signal.source} size={14} />
           <span
-            className={`text-[12px] font-bold ${sourceTextClass[signal.source]}`}
+            className={`text-sm font-bold ${sourceTextClass[signal.source]}`}
           >
             {sourceLabels[signal.source]}
           </span>
           <ExternalLink size={10} className="text-muted" />
         </a>
         {signal.publishedAt ? (
-          <p className="mt-0.5 text-[10px] text-muted">
+          <p className="mt-1 text-xs text-muted">
             {formatDate(signal.publishedAt)}
           </p>
         ) : null}
       </td>
 
       {/* Type */}
-      <td className="px-3 py-3 align-top">
-        <span className="rounded-full border border-line bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold capitalize text-muted">
+      <td className="px-3 py-4 align-top">
+        <span className="rounded-full border border-line bg-white/[0.04] px-2.5 py-1 text-xs font-semibold capitalize text-muted">
           {signal.evidenceKind ?? "signal"}
         </span>
-        <p className="mt-1 max-w-[150px] whitespace-normal text-[9px] leading-3 text-muted/75">
+        <p className="mt-1.5 max-w-[180px] whitespace-normal text-xs leading-4 text-muted/75">
           {getEvidenceTrail(signal)}
         </p>
       </td>
 
       {/* Score */}
-      <td className="px-3 py-3 align-top">
+      <td className="px-3 py-4 align-top">
         {score ? (
           <span
-            className={`font-mono text-[14px] font-black ${
+            className={`font-mono text-base font-black ${
               score.total >= 0.8
                 ? "text-accent"
                 : score.total >= 0.6
@@ -1056,20 +1079,20 @@ function EvidenceRow({
             {score.total.toFixed(2)}
           </span>
         ) : (
-          <span className="text-[11px] text-muted">-</span>
+          <span className="text-xs text-muted">-</span>
         )}
       </td>
 
       {/* Rationale */}
-      <td className="max-w-[320px] py-3.5 pl-3 pr-4 align-top">
-        <div className="space-y-1.5">
+      <td className="max-w-[360px] py-4 pl-3 pr-4 align-top">
+        <div className="space-y-2">
           {score?.reasons.length ? (
-            <p className="line-clamp-3 text-[11px] leading-4 text-muted">
+            <p className="line-clamp-3 text-sm leading-5 text-muted">
               {score.reasons.join(". ")}
             </p>
           ) : null}
           <a
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-blue transition hover:underline"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-accent-blue transition hover:underline"
             href={signal.url}
             target="_blank"
             rel="noreferrer"
@@ -1092,34 +1115,34 @@ function ClusterRow({
   index: number;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-line/40 py-2.5 last:border-b-0 hover:bg-white/[0.02] transition">
-      <span className="w-5 text-center text-[11px] font-bold text-accent-purple">
+    <div className="flex items-center gap-2 border-b border-line/40 py-3 transition last:border-b-0 hover:bg-white/[0.02]">
+      <span className="w-5 text-center text-xs font-bold text-accent-purple">
         {index}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">
+      <span className="min-w-0 flex-1 line-clamp-2 text-sm font-semibold leading-5 text-foreground">
         {cluster.title}
       </span>
       <span className="w-16 text-center">
         <span
-          className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${urgencyBadgeClass[cluster.urgency]}`}
+          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-bold capitalize ${urgencyBadgeClass[cluster.urgency]}`}
         >
           {cluster.urgency}
         </span>
       </span>
-      <span className="w-10 text-center text-[11px] font-mono text-accent-purple">
+      <span className="w-10 text-center text-xs font-mono text-accent-purple">
         {cluster.sourceDiversity ?? 1}/{cluster.signalIds.length > 3 ? 3 : cluster.signalIds.length}
       </span>
       <span className="flex w-24 justify-end gap-1 overflow-hidden">
         {cluster.relatedTools.slice(0, 2).map((tool) => (
           <span
             key={tool}
-            className="truncate rounded border border-accent-purple/20 bg-accent-purple/8 px-1.5 py-0.5 text-[9px] font-semibold text-accent-purple/80"
+            className="truncate rounded border border-accent-purple/20 bg-accent-purple/8 px-1.5 py-0.5 text-xs font-semibold text-accent-purple/80"
           >
             {tool}
           </span>
         ))}
         {cluster.relatedTools.length > 2 ? (
-          <span className="rounded border border-accent-purple/20 bg-accent-purple/8 px-1 py-0.5 text-[9px] text-accent-purple/60">
+          <span className="rounded border border-accent-purple/20 bg-accent-purple/8 px-1 py-0.5 text-xs text-accent-purple/60">
             +{cluster.relatedTools.length - 2}
           </span>
         ) : null}
@@ -1134,6 +1157,27 @@ function Diagnostics({ result }: { result: MineResult }) {
   const timings = result.metadata.timings ?? [];
   const searches = result.metadata.searchDiagnostics ?? [];
   const sourceDebug = result.metadata.sourceDebug ?? [];
+  const plan = result.metadata.queryPlan;
+  const totalRaw = sourceDebug.reduce(
+    (sum, debug) => sum + debug.rawCandidates,
+    0
+  );
+  const totalQualityAccepted = sourceDebug.reduce(
+    (sum, debug) => sum + debug.qualityAccepted,
+    0
+  );
+  const totalQualityRejected = sourceDebug.reduce(
+    (sum, debug) => sum + debug.qualityRejected,
+    0
+  );
+  const totalEvidence = sourceDebug.reduce(
+    (sum, debug) => sum + debug.evidenceAccepted,
+    0
+  );
+  const totalFinal = sourceDebug.reduce(
+    (sum, debug) => sum + debug.finalSignals,
+    0
+  );
   const llmStatus = result.metadata.llm.failureReason
     ? "issue"
     : result.metadata.llm.callsAttempted > 0
@@ -1150,14 +1194,14 @@ function Diagnostics({ result }: { result: MineResult }) {
 
   return (
     <details className="group rounded-lg border border-line bg-panel/70 backdrop-blur-xl">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5">
-        <span className="flex items-center gap-2 text-[12px] font-black uppercase tracking-wide">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <span className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
           <Braces size={14} className="text-accent-purple" />
           Diagnostics Console
         </span>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {timings.length > 0 && (
-            <span className="text-[10px] text-muted">
+            <span className="text-xs text-muted">
               Total:{" "}
               <span className="font-mono font-bold text-accent-blue">
                 {timings.find((t) => t.name === "total")?.durationMs ?? "-"}ms
@@ -1165,7 +1209,7 @@ function Diagnostics({ result }: { result: MineResult }) {
             </span>
           )}
           {result.metadata.llm.model && (
-            <span className="text-[10px] text-muted">
+            <span className="text-xs text-muted">
               Model:{" "}
               <span className="font-semibold text-accent-purple">
                 {result.metadata.llm.model}
@@ -1173,7 +1217,7 @@ function Diagnostics({ result }: { result: MineResult }) {
             </span>
           )}
           {warnings.length > 0 && (
-            <span className="flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-bold text-warning">
+            <span className="flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-bold text-warning">
               <AlertTriangle size={10} /> {warnings.length}
             </span>
           )}
@@ -1185,11 +1229,77 @@ function Diagnostics({ result }: { result: MineResult }) {
       </summary>
 
       <div className="border-t border-line/50 px-4 py-3">
-        <div className="grid gap-3 text-[11px] lg:grid-cols-5">
+        <div className="grid gap-3 text-xs lg:grid-cols-2 xl:grid-cols-3">
+          <DiagnosticBlock
+            title="Research Budget"
+            icon={<Route size={12} className="text-accent-blue" />}
+          >
+            <DiagnosticLine
+              label="Waves"
+              value={plan?.waves?.length ?? (searches.length ? 1 : 0)}
+              valueClass="text-accent-blue"
+            />
+            <DiagnosticLine
+              label="Searches"
+              value={searches.length}
+              valueClass="text-foreground"
+            />
+            <DiagnosticLine
+              label="Max results"
+              value={result.signals.length}
+              valueClass="text-accent"
+            />
+            {plan?.stopReason ? (
+              <p className="mt-2 line-clamp-3 border-t border-line/40 pt-2 text-xs leading-5 text-muted">
+                {plan.stopReason}
+              </p>
+            ) : null}
+          </DiagnosticBlock>
+
+          <DiagnosticBlock
+            title="Source Coverage"
+            icon={<Network size={12} className="text-accent-orange" />}
+          >
+            {sourceDebug.length ? (
+              sourceDebug.map((debug) => (
+                <DiagnosticLine
+                  key={debug.source}
+                  label={sourceLabels[debug.source]}
+                  value={`${debug.rawCandidates} raw -> ${debug.finalSignals} final`}
+                  valueClass={sourceTextClass[debug.source]}
+                />
+              ))
+            ) : (
+              <p className="text-muted">No source coverage in demo.</p>
+            )}
+          </DiagnosticBlock>
+
+          <DiagnosticBlock
+            title="Quality Flow"
+            icon={<ShieldCheck size={12} className="text-success" />}
+          >
+            <DiagnosticLine label="Raw" value={totalRaw} />
+            <DiagnosticLine
+              label="Accepted / rejected"
+              value={`${totalQualityAccepted} / ${totalQualityRejected}`}
+              valueClass="text-warning"
+            />
+            <DiagnosticLine
+              label="Evidence"
+              value={totalEvidence}
+              valueClass="text-accent-blue"
+            />
+            <DiagnosticLine
+              label="Final"
+              value={totalFinal}
+              valueClass="text-accent"
+            />
+          </DiagnosticBlock>
+
           {/* Timings */}
           <DiagnosticBlock
             title="Timings"
-            icon={<Clock3 size={11} className="text-accent-blue" />}
+            icon={<Clock3 size={12} className="text-accent-blue" />}
           >
             {timings.length ? (
               timings.map((t) => (
@@ -1208,9 +1318,9 @@ function Diagnostics({ result }: { result: MineResult }) {
           {/* LLM Status */}
           <DiagnosticBlock
             title="LLM Status"
-            icon={<ShieldCheck size={11} className="text-accent-purple" />}
+            icon={<Brain size={12} className="text-accent-purple" />}
             titleRight={
-              <span className="flex items-center gap-1 text-[9px]">
+              <span className="flex items-center gap-1 text-xs">
                 <span
                   className={`size-2 rounded-full ${
                     llmStatus === "issue"
@@ -1247,49 +1357,27 @@ function Diagnostics({ result }: { result: MineResult }) {
               label="Calls"
               value={result.metadata.llm.callsAttempted}
             />
-          </DiagnosticBlock>
-
-          {/* Source Diagnostics */}
-          <DiagnosticBlock
-            title="Research Sources"
-            icon={<BarChart3 size={11} className="text-accent-orange" />}
-          >
-            {searches.length ? (
-              searches.slice(0, 4).map((s) => (
-                <div
-                  key={`${s.source}-${s.query}`}
-                  className="flex items-center justify-between gap-2 border-b border-line/40 py-1 last:border-b-0"
-                >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <SourceIcon source={s.source} size={12} />
-                    <span className={`font-semibold ${sourceTextClass[s.source]}`}>
-                      {sourceLongLabels[s.source]}
-                    </span>
-                    <span className="text-muted">{s.rawSignals}</span>
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[9px]">
-                    <span
-                      className={`size-2 rounded-full ${s.status === "success" ? "bg-success" : "bg-danger"}`}
-                    />
-                    <span className={s.status === "success" ? "text-success" : "text-danger"}>
-                      {formatSearchStatus(s)}
-                    </span>
-                    <span className="text-muted">{s.durationMs}ms</span>
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="text-muted">No source diagnostics in demo.</p>
-            )}
+            <DiagnosticLine
+              label="Gap expansion"
+              value={formatTraceMode(
+                result.metadata.llm.gapExpansionMode ?? "disabled"
+              )}
+              valueClass={
+                result.metadata.llm.gapExpansionMode === "used"
+                  || result.metadata.llm.gapExpansionMode === "deterministic"
+                  ? "text-success"
+                  : "text-muted"
+              }
+            />
           </DiagnosticBlock>
 
           {/* Warnings */}
           <DiagnosticBlock
             title="Warnings"
-            icon={<AlertTriangle size={11} className="text-warning" />}
+            icon={<AlertTriangle size={12} className="text-warning" />}
             titleRight={
               warnings.length > 0 ? (
-                <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[9px] font-black text-warning">
+                <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-xs font-black text-warning">
                   {warnings.length}
                 </span>
               ) : undefined
@@ -1299,7 +1387,7 @@ function Diagnostics({ result }: { result: MineResult }) {
               warnings.slice(0, 3).map((w) => (
                 <p
                   key={w}
-                  className="flex gap-1.5 border-b border-line/40 py-1 text-[10px] leading-4 text-warning/80 last:border-b-0"
+                  className="flex gap-1.5 border-b border-line/40 py-1.5 text-xs leading-5 text-warning/80 last:border-b-0"
                 >
                   <TriangleAlert size={10} className="mt-0.5 shrink-0" /> {w}
                 </p>
@@ -1311,51 +1399,23 @@ function Diagnostics({ result }: { result: MineResult }) {
             )}
           </DiagnosticBlock>
 
-          {/* Data Freshness */}
-          <DiagnosticBlock
-            title="Data Freshness"
-            icon={<RadioTower size={11} className="text-success" />}
-          >
-            {searches.length ? (
-              searches.slice(0, 4).map((s) => (
-                <div
-                  key={`fresh-${s.source}-${s.query}`}
-                  className="flex items-center justify-between gap-2 border-b border-line/40 py-1 last:border-b-0"
-                >
-                  <span className={`font-semibold ${sourceTextClass[s.source]}`}>
-                    {sourceLabels[s.source]}
-                  </span>
-                  <span className="flex items-center gap-1 text-[9px]">
-                    <span
-                      className={`size-2 rounded-full ${s.status === "success" ? "bg-success animate-pulse" : "bg-danger"}`}
-                    />
-                    <span className={s.status === "success" ? "font-bold text-success" : "text-danger"}>
-                      {s.status === "success" ? "completed" : "failed"}
-                    </span>
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="text-muted">Demo data</p>
-            )}
-          </DiagnosticBlock>
         </div>
 
         {sourceDebug.length ? (
-          <div className="mt-3 rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+          <div className="mt-3 rounded-md border border-line/50 bg-black/20 px-3 py-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
                 <Network size={12} className="text-accent-blue" />
                 Research Funnel Debug
               </span>
-              <span className="text-[10px] text-muted">
+              <span className="text-xs text-muted">
                 discovery to fetch to enrichment to evidence
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[840px] text-left text-[11px]">
+              <table className="w-full min-w-[900px] text-left text-xs">
                 <thead>
-                  <tr className="border-b border-line/50 text-[10px] font-black uppercase tracking-wider text-muted">
+                  <tr className="border-b border-line/50 text-xs font-black uppercase tracking-wide text-muted">
                     <th className="py-2 pr-3">Source</th>
                     <th className="px-3 py-2">Raw</th>
                     <th className="px-3 py-2">Quality</th>
@@ -1404,7 +1464,7 @@ function Diagnostics({ result }: { result: MineResult }) {
                               ([flag, count]) => (
                                 <span
                                   key={flag}
-                                  className="rounded-full border border-warning/25 bg-warning/10 px-1.5 py-0.5 text-[9px] font-semibold text-warning"
+                                  className="rounded-full border border-warning/25 bg-warning/10 px-1.5 py-0.5 text-xs font-semibold text-warning"
                                 >
                                   {flag}: {count}
                                 </span>
@@ -1421,7 +1481,7 @@ function Diagnostics({ result }: { result: MineResult }) {
                             {debug.sampleRejected.map((sample) => (
                               <p
                                 key={`${sample.title}-${sample.flags.join(",")}`}
-                                className="line-clamp-1 text-[10px] text-muted"
+                                className="line-clamp-1 text-xs text-muted"
                                 title={`${sample.title} (${sample.flags.join(", ")})`}
                               >
                                 rejected: {sample.title}
@@ -1433,7 +1493,7 @@ function Diagnostics({ result }: { result: MineResult }) {
                             {debug.sampleAcceptedTitles.map((title) => (
                               <p
                                 key={title}
-                                className="line-clamp-1 text-[10px] text-muted"
+                                className="line-clamp-1 text-xs text-muted"
                                 title={title}
                               >
                                 accepted: {title}
@@ -1449,7 +1509,7 @@ function Diagnostics({ result }: { result: MineResult }) {
                 </tbody>
               </table>
             </div>
-            <p className="mt-2 text-[10px] leading-4 text-muted">
+            <p className="mt-3 text-xs leading-5 text-muted">
               Quality shows accepted/rejected before LLM judgment. Evidence is
               quote extraction output. Final is normalized evidence used by the
               dashboard.
@@ -1459,7 +1519,7 @@ function Diagnostics({ result }: { result: MineResult }) {
 
         {/* LLM Failure details */}
         {result.metadata.llm.failureReason ? (
-          <div className="mt-3 flex items-start gap-2 rounded-md border border-danger/25 bg-danger/8 px-3 py-2 text-[11px] text-danger">
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-danger/25 bg-danger/8 px-3 py-2 text-xs text-danger">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" />
             {result.metadata.llm.failureReason}
           </div>
@@ -1485,25 +1545,21 @@ function MetricCell({
   valueClass?: string;
 }) {
   return (
-    <div className="flex min-w-[120px] flex-1 flex-col justify-center px-4 py-2.5">
-      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted">
+    <div className="flex min-w-0 flex-col justify-center bg-panel/70 px-4 py-3">
+      <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
         {icon}
         {label}
       </span>
       <p
-        className={`mt-1 text-[16px] font-black capitalize tracking-tight ${valueClass}`}
+        className={`mt-1.5 text-xl font-black capitalize tracking-tight ${valueClass}`}
       >
         {value}
       </p>
       {detail ? (
-        <span className="mt-0.5 text-[10px] text-muted">{detail}</span>
+        <span className="mt-1 text-xs text-muted">{detail}</span>
       ) : null}
     </div>
   );
-}
-
-function MetricDivider() {
-  return <div className="my-2.5 w-px bg-line" />;
 }
 
 function Panel({
@@ -1523,14 +1579,14 @@ function Panel({
     <div
       className={`flex flex-col rounded-lg border border-line border-t-2 ${accentColor} bg-panel/70 shadow-[0_12px_48px_rgba(0,0,0,0.2)] backdrop-blur-xl`}
     >
-      <div className="flex items-center justify-between border-b border-line/50 px-4 py-2.5">
-        <span className="flex items-center gap-2 text-[12px] font-black uppercase tracking-wide text-foreground">
+      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line/50 px-4 py-3">
+        <span className="flex min-w-0 items-center gap-2 text-sm font-black uppercase tracking-wide text-foreground">
           {icon}
           {title}
         </span>
         {headerRight}
       </div>
-      <div className="flex-1 px-4 py-3">{children}</div>
+      <div className="flex-1 px-4 py-4">{children}</div>
     </div>
   );
 }
@@ -1547,8 +1603,8 @@ function DiagnosticBlock({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2">
-      <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
+    <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+      <div className="mb-2.5 flex items-center justify-between gap-2 text-xs font-black uppercase tracking-wide text-muted">
         <span className="flex items-center gap-1.5">
           {icon}
           {title}
@@ -1570,7 +1626,7 @@ function DiagnosticLine({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line/40 py-1 text-[11px] last:border-b-0">
+    <div className="flex items-center justify-between gap-3 border-b border-line/40 py-1.5 text-xs last:border-b-0">
       <span className="text-muted">{label}</span>
       <span className={`font-mono ${valueClass}`}>{value}</span>
     </div>
@@ -1579,7 +1635,7 @@ function DiagnosticLine({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-md border border-dashed border-line/50 bg-black/12 p-4 text-center text-[12px] text-muted">
+    <div className="rounded-md border border-dashed border-line/50 bg-black/12 p-4 text-center text-sm text-muted">
       <FileText className="mx-auto mb-1.5 text-muted/50" size={15} />
       {text}
     </div>

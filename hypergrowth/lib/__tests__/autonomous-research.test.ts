@@ -246,6 +246,7 @@ describe("autonomous research", () => {
     expect(run.candidates.some((candidate) => candidate.source === "github")).toBe(
       true
     );
+    expect(run.llm.candidateTriageMode).toBe("deterministic");
   });
 
   it("preserves selected HN and GitHub coverage even when the wave query budget is tight", async () => {

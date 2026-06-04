@@ -24,12 +24,12 @@ type Synthesis = Pick<
 export async function synthesizeSignals(
   input: SynthesisInput,
   options: { allowLLM: boolean } = { allowLLM: false }
-): Promise<Synthesis & { callsAttempted: number; mode: "disabled" | "used" | "fallback"; failureReason?: string }> {
+): Promise<Synthesis & { callsAttempted: number; mode: "disabled" | "used" | "fallback" | "deterministic"; failureReason?: string }> {
   if (!options.allowLLM) {
     return {
       ...synthesizeDeterministically(input.clusters, input.candidatePlays),
       callsAttempted: 0,
-      mode: "disabled",
+      mode: "deterministic",
     };
   }
 
@@ -37,7 +37,7 @@ export async function synthesizeSignals(
     return {
       ...synthesizeDeterministically(input.clusters, input.candidatePlays),
       callsAttempted: 0,
-      mode: "disabled",
+      mode: "fallback",
       failureReason: "No LLM provider configured for synthesis.",
     };
   }

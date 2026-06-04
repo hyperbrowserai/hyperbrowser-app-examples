@@ -10,7 +10,6 @@ export type ResearchBudget = {
   maxWaves: number;
   maxQueriesPerWave: number;
   maxFetchesPerRun: number;
-  maxEvidence: number;
   maxEnrichmentSearches: number;
   requestTimeoutMs: number;
 };
@@ -71,10 +70,10 @@ export type ResearchResult = {
   searchDiagnostics: SearchDiagnostic[];
   rejectedCandidates: number;
   llm: {
-    queryExpansionMode: "disabled" | "used" | "fallback";
-    candidateTriageMode: "disabled" | "used" | "fallback";
+    queryExpansionMode: "disabled" | "used" | "fallback" | "deterministic";
+    candidateTriageMode: "disabled" | "used" | "fallback" | "deterministic";
     evidenceExtractionMode: "disabled" | "used" | "fallback" | "partial";
-    gapExpansionMode: "disabled" | "used" | "fallback";
+    gapExpansionMode: "disabled" | "used" | "fallback" | "deterministic";
     callsAttempted: number;
     failureReason?: string;
   };

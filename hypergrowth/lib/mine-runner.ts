@@ -121,7 +121,12 @@ export async function executeMineRun(
   const executedSearches = research.executedSearches;
   const searchDiagnostics = research.searchDiagnostics;
   const queryPlanResult = {
-    plan: researchPlanToQueryPlan(query, researchSources, research.diagnostics.plan),
+    plan: researchPlanToQueryPlan(
+      query,
+      researchSources,
+      research.diagnostics.plan,
+      research.diagnostics.stopReason
+    ),
   };
 
   llmMetadata.queryExpansionMode = research.llm.queryExpansionMode;
@@ -369,7 +374,8 @@ function ensureHyperbrowserSource(sources: SignalSource[]): SignalSource[] {
 function researchPlanToQueryPlan(
   query: string,
   sources: SignalSource[],
-  plan: ResearchPlan
+  plan: ResearchPlan,
+  stopReason?: string
 ): QueryPlan {
   const sourceQueries: QueryPlan["sourceQueries"] = {
     github: [],
@@ -395,10 +401,20 @@ function researchPlanToQueryPlan(
         ? "llm-source-routed"
         : "static-source-routed",
     sourceQueries,
+    waves: plan.waves.map((wave) => ({
+      index: wave.index,
+      reason: wave.reason,
+      searches: wave.searches.map((search) => ({
+        source: search.source,
+        query: search.query,
+        reason: search.reason,
+      })),
+    })),
+    stopReason,
     rationale: [
       ...plan.rationale,
       `Autonomous research stop condition: ${
-        plan.waves.at(-1)?.reason ?? "source-specific discovery"
+        stopReason ?? plan.waves.at(-1)?.reason ?? "source-specific discovery"
       }.`,
     ].slice(0, 5),
   };

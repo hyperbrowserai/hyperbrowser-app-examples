@@ -44,6 +44,12 @@ export type QueryPlan = {
   originalQuery: string;
   strategy: SearchStrategy;
   sourceQueries: Record<SignalSource, string[]>;
+  waves?: Array<{
+    index: number;
+    reason: string;
+    searches: ExecutedSearch[];
+  }>;
+  stopReason?: string;
   sourceWeights?: Partial<Record<SignalSource, number>>;
   rationale: string[];
 };
@@ -281,12 +287,12 @@ export type LLMProviderMetadata = {
 export type LLMUsageMetadata = {
   provider?: string;
   model?: string;
-  queryExpansionMode: "disabled" | "used" | "fallback";
-  candidateTriageMode?: "disabled" | "used" | "fallback";
+  queryExpansionMode: "disabled" | "used" | "fallback" | "deterministic";
+  candidateTriageMode?: "disabled" | "used" | "fallback" | "deterministic";
   evidenceExtractionMode?: "disabled" | "used" | "fallback" | "partial";
-  gapExpansionMode?: "disabled" | "used" | "fallback";
+  gapExpansionMode?: "disabled" | "used" | "fallback" | "deterministic";
   judgmentMode: "disabled" | "used" | "fallback" | "partial";
-  synthesisMode: "disabled" | "used" | "fallback";
+  synthesisMode: "disabled" | "used" | "fallback" | "deterministic";
   callsAttempted: number;
   failureReason?: string;
 };

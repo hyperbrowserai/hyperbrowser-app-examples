@@ -28,7 +28,6 @@ const defaultBudget: ResearchBudget = {
   maxWaves: 2,
   maxQueriesPerWave: 8,
   maxFetchesPerRun: 5,
-  maxEvidence: 12,
   maxEnrichmentSearches: 6,
   requestTimeoutMs: 12_000,
 };
@@ -216,7 +215,7 @@ export async function runAutonomousResearch({
     const judged = await judgeEvidence({
       query,
       candidates,
-      maxResults: Math.min(maxResults, effectiveBudget.maxEvidence),
+      maxResults,
       allowLLM: llm.callsAttempted < llmCallBudget,
     });
     llm.evidenceExtractionMode = combineMode(
@@ -240,7 +239,7 @@ export async function runAutonomousResearch({
     }
 
     const coverage = sourceCoverage(effectiveSources, executedSearches);
-    const targetEvidence = Math.min(maxResults, effectiveBudget.maxEvidence);
+    const targetEvidence = maxResults;
     const enoughEvidence = judged.rawSignals.length >= targetEvidence;
 
     if (enoughEvidence && coverage.complete) {
@@ -586,6 +585,9 @@ function combineMode<T extends string>(current: T, next: T): T {
   if (current === "used" || next === "used") return "used" as T;
   if (current === "partial" || next === "partial") return "partial" as T;
   if (current === "fallback" || next === "fallback") return "fallback" as T;
+  if (current === "deterministic" || next === "deterministic") {
+    return "deterministic" as T;
+  }
   return next;
 }
 
