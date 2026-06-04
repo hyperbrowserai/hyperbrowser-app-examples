@@ -3,19 +3,21 @@ import { applyEvidenceQualityGate } from "../evidence-quality";
 import type { EvidenceCandidate } from "../types";
 
 describe("applyEvidenceQualityGate", () => {
-  it("rejects login and navigation chrome before scoring", () => {
+  it("does not hard-reject sign-in affordances before LLM triage", () => {
     const candidate = candidateWith({
-      title: "[Skip to content](https://github.com)",
-      snippet: "[Sign in](https://github.com/login?return_to=/search)",
+      title: "Playwright session fails after login",
+      snippet:
+        "Developers say the browser automation works until the app asks users to sign in again.",
     });
 
     const result = applyEvidenceQualityGate(
       [candidate],
-      "playwright cloudflare blocked"
+      "playwright login session"
     );
 
-    expect(result.accepted).toHaveLength(0);
-    expect(result.rejected[0]?.qualityFlags).toContain("login_required");
+    expect(result.accepted).toHaveLength(1);
+    expect(result.rejected).toHaveLength(0);
+    expect(result.accepted[0]?.qualityFlags).not.toContain("login_required");
   });
 
   it("keeps concrete developer pain evidence", () => {

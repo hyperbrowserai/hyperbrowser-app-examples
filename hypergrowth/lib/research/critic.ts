@@ -35,7 +35,6 @@ export async function selectFetchTargets({
   failureReason?: string;
 }> {
   const fetchable = candidates
-    .filter((candidate) => candidate.discoveryMethod === "hyperbrowser-search")
     .slice(0, Math.max(maxTargets * 2, maxTargets));
 
   if (fetchable.length === 0 || maxTargets <= 0) {

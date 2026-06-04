@@ -3,9 +3,6 @@ import { matchedTerms, tokenize, unique } from "./text";
 import type { EvidenceCandidate, EvidenceQualityFlag } from "./types";
 
 const noisePatterns = [
-  /skip to content/i,
-  /sign in/i,
-  /log in/i,
   /you signed in with another tab/i,
   /you've been blocked/i,
   /you have been blocked/i,
@@ -14,7 +11,6 @@ const noisePatterns = [
   /no stories matching/i,
   /search for comments/i,
   /enable javascript/i,
-  /accept cookies/i,
 ];
 
 export function applyEvidenceQualityGate(

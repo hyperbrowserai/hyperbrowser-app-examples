@@ -1,7 +1,7 @@
 import { jaccardSimilarity } from "./text";
 import type { DedupeGroup, PainSignal, SignalScore } from "./types";
 
-const defaultThreshold = 0.82;
+const defaultThreshold = 0.65;
 
 export function dedupeSignals(
   signals: PainSignal[],
@@ -38,8 +38,7 @@ export function dedupeSignals(
       id: `dedupe-${index + 1}`,
       canonicalSignalId,
       duplicateSignalIds,
-      compressionRatio:
-        (duplicateSignalIds.length + 1) / Math.max(1, duplicateSignalIds.length),
+      compressionRatio: duplicateSignalIds.length + 1,
       similarityThreshold: threshold,
     })
   );

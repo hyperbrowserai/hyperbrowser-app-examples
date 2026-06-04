@@ -1,6 +1,6 @@
 import type { Hyperbrowser } from "@hyperbrowser/sdk";
 import { applyEvidenceQualityGate } from "../evidence-quality";
-import { fetchMarkdown } from "../hyperbrowser";
+import { fetchPageArtifacts } from "../hyperbrowser";
 import { formatHyperbrowserError } from "../hyperbrowser-errors";
 import { truncateRunEventText, type EmitRunEvent } from "../run-events";
 import { withTimeout } from "../source-budget";
@@ -14,10 +14,13 @@ import type {
 } from "../types";
 import { selectFetchTargets } from "./critic";
 import { judgeEvidence } from "./evidence-judge";
+import { triageFetchedPages } from "./page-triage";
 import { createGapExpansionSearches, createResearchPlan } from "./planner";
 import type {
   FetchAdapter,
   FetchedDocument,
+  PageTriageAdapter,
+  PageTriageDecision,
   ResearchBudget,
   ResearchSearch,
   ResearchResult,
@@ -44,6 +47,7 @@ export async function runAutonomousResearch({
   budget = defaultBudget,
   searchAdapter,
   fetchAdapter,
+  pageTriageAdapter,
 }: {
   client: Hyperbrowser;
   query: string;
@@ -56,12 +60,18 @@ export async function runAutonomousResearch({
   budget?: Partial<ResearchBudget>;
   searchAdapter?: SearchAdapter;
   fetchAdapter?: FetchAdapter;
+  pageTriageAdapter?: PageTriageAdapter;
 }): Promise<ResearchResult> {
-  const effectiveBudget = { ...defaultBudget, ...budget };
+  const effectiveBudget = {
+    ...defaultBudget,
+    maxFetchesPerRun: Math.max(defaultBudget.maxFetchesPerRun, maxResults * 2),
+    ...budget,
+  };
   const effectiveSources = uniqueSources([...sources, "hyperbrowser"]);
   const llm: ResearchResult["llm"] = {
     queryExpansionMode: "disabled",
     candidateTriageMode: "disabled",
+    pageTriageMode: "disabled",
     evidenceExtractionMode: "disabled",
     gapExpansionMode: "disabled",
     callsAttempted: 0,
@@ -70,6 +80,8 @@ export async function runAutonomousResearch({
   const candidates: EvidenceCandidate[] = [];
   const searchDiagnostics: SearchDiagnostic[] = [];
   const fetchedDocuments: FetchedDocument[] = [];
+  const pageTriageDecisions: ResearchResult["diagnostics"]["pageTriageDecisions"] =
+    [];
   const executedSearches: ExecutedSearch[] = [];
   let qualityAccepted: EvidenceCandidate[] = [];
   let qualityRejected: EvidenceCandidate[] = [];
@@ -146,9 +158,7 @@ export async function runAutonomousResearch({
       llmCallBudget;
     const critic = await selectFetchTargets({
       query,
-      candidates: initialQuality.accepted.filter(
-        (candidate) => candidate.source === "hyperbrowser"
-      ),
+      candidates: initialQuality.accepted,
       maxTargets: remainingFetches,
       allowLLM: allowCriticLLM,
     });
@@ -163,6 +173,7 @@ export async function runAutonomousResearch({
     });
 
     const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const fetchedThisWave: FetchedDocument[] = [];
     for (const target of critic.targets) {
       if (fetchesUsed >= effectiveBudget.maxFetchesPerRun) break;
       const candidate = byId.get(target.candidateId);
@@ -171,6 +182,7 @@ export async function runAutonomousResearch({
 
       const fetched = await (fetchAdapter ?? defaultFetchAdapter(client))(candidate);
       fetchedDocuments.push(fetched);
+      fetchedThisWave.push(fetched);
 
       if (fetched.status === "success") {
         const index = candidates.findIndex((item) => item.id === candidate.id);
@@ -183,6 +195,32 @@ export async function runAutonomousResearch({
         if (index >= 0) candidates[index] = enriched;
       }
     }
+
+    const allowPageTriageLLM =
+      allowLLM &&
+      fetchedThisWave.some((document) => document.status === "success") &&
+      llm.callsAttempted < llmCallBudget;
+    const pageTriage = await (pageTriageAdapter ?? triageFetchedPages)({
+      query,
+      candidates,
+      fetchedDocuments: fetchedThisWave,
+      maxDecisions: Math.max(maxResults, fetchedThisWave.length),
+      allowLLM: allowPageTriageLLM,
+    });
+    llm.pageTriageMode = combineMode(llm.pageTriageMode, pageTriage.mode);
+    llm.callsAttempted += pageTriage.callsAttempted;
+    llm.failureReason = joinFailureReasons(
+      llm.failureReason,
+      pageTriage.failureReason
+    );
+    pageTriageDecisions.push(...pageTriage.decisions);
+    applyPageTriageToFetchedDocuments(fetchedDocuments, pageTriage.decisions);
+    await emit?.({
+      type: "llm_step",
+      step: "page_triage",
+      mode: pageTriage.mode,
+      summary: `Triaged ${pageTriage.decisions.length} fetched pages with browser artifacts.`,
+    });
 
     const enrichmentSearches = planEnrichmentSearches({
       query,
@@ -215,6 +253,7 @@ export async function runAutonomousResearch({
     const judged = await judgeEvidence({
       query,
       candidates,
+      pageTriageDecisions,
       maxResults,
       allowLLM: llm.callsAttempted < llmCallBudget,
     });
@@ -316,6 +355,7 @@ export async function runAutonomousResearch({
       plan: { ...planner.plan, waves },
       searches: searchDiagnostics,
       fetchedDocuments,
+      pageTriageDecisions,
       judgments,
       stopReason,
     },
@@ -541,16 +581,32 @@ function extractLinkedEnrichmentSearches({
 function defaultFetchAdapter(client: Hyperbrowser): FetchAdapter {
   return async (candidate) => {
     const url = candidate.canonicalUrl ?? candidate.sourceUrl;
+    const stealth = isRedditUrl(url) ? "auto" : undefined;
 
     try {
-      const { markdown, links } = await fetchMarkdown(client, url, {
-        stealth: isRedditUrl(url) ? "auto" : undefined,
+      const artifacts = await fetchPageArtifacts(client, url, {
+        stealth,
       });
       return {
         candidateId: candidate.id,
         url,
-        markdown,
-        links: normalizeFetchedLinks(links),
+        markdown: artifacts.markdown,
+        links: normalizeFetchedLinks(artifacts.links),
+        outputFormats: artifacts.outputFormats,
+        stealth,
+        metadataTitle: readString(artifacts.metadata?.title),
+        metadataDescription: readString(artifacts.metadata?.description),
+        metadataSourceUrl: readString(artifacts.metadata?.sourceURL),
+        screenshot: artifacts.screenshot
+          ? {
+              src: artifacts.screenshot,
+              byteLength: estimateStringBytes(artifacts.screenshot),
+            }
+          : undefined,
+        pageSummary: artifacts.json,
+        branding: artifacts.branding,
+        richFetchStatus: artifacts.richFetchStatus,
+        richFetchError: artifacts.richFetchError,
         status: "success",
       };
     } catch (error) {
@@ -558,6 +614,9 @@ function defaultFetchAdapter(client: Hyperbrowser): FetchAdapter {
         candidateId: candidate.id,
         url,
         markdown: "",
+        links: [],
+        outputFormats: ["markdown", "links"],
+        stealth,
         status: "error",
         error: formatHyperbrowserError(error),
       };
@@ -579,6 +638,30 @@ function normalizeFetchedLinks(links: unknown[]): string[] {
     })
     .filter((link) => /^https?:\/\//i.test(link))
     .slice(0, 40);
+}
+
+function applyPageTriageToFetchedDocuments(
+  fetchedDocuments: FetchedDocument[],
+  decisions: PageTriageDecision[]
+): void {
+  const decisionByCandidateId = new Map(
+    decisions.map((decision) => [decision.candidateId, decision])
+  );
+
+  for (const document of fetchedDocuments) {
+    const decision = decisionByCandidateId.get(document.candidateId);
+    if (decision) {
+      document.pageTriage = decision;
+    }
+  }
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function estimateStringBytes(value: string): number {
+  return Math.ceil(value.length * 0.75);
 }
 
 function combineMode<T extends string>(current: T, next: T): T {

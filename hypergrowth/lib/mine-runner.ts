@@ -14,8 +14,10 @@ import {
 import type {
   EvidenceCandidate,
   ExecutedSearch,
+  HyperbrowserRunTrace,
   LLMUsageMetadata,
   MineResult,
+  PainCategory,
   PainSignal,
   RawSignal,
   PhaseTiming,
@@ -131,6 +133,7 @@ export async function executeMineRun(
 
   llmMetadata.queryExpansionMode = research.llm.queryExpansionMode;
   llmMetadata.candidateTriageMode = research.llm.candidateTriageMode;
+  llmMetadata.pageTriageMode = research.llm.pageTriageMode;
   llmMetadata.evidenceExtractionMode = research.llm.evidenceExtractionMode;
   llmMetadata.gapExpansionMode = research.llm.gapExpansionMode;
   llmMetadata.callsAttempted += research.llm.callsAttempted;
@@ -181,6 +184,13 @@ export async function executeMineRun(
       queryPlan: queryPlanResult.plan,
       executedSearches,
       searchDiagnostics,
+      hyperbrowserRun: buildHyperbrowserRunTrace({
+        candidates,
+        qualityRejected: quality.rejected,
+        rawSignals,
+        searchDiagnostics,
+        fetchedDocuments: research.diagnostics.fetchedDocuments,
+      }),
       sourceDebug,
       timings: finishTimings(timings, totalStartedAt),
     });
@@ -218,6 +228,13 @@ export async function executeMineRun(
       queryPlan: queryPlanResult.plan,
       executedSearches,
       searchDiagnostics,
+      hyperbrowserRun: buildHyperbrowserRunTrace({
+        candidates,
+        qualityRejected: quality.rejected,
+        rawSignals,
+        searchDiagnostics,
+        fetchedDocuments: research.diagnostics.fetchedDocuments,
+      }),
       sourceDebug,
       timings: finishTimings(timings, totalStartedAt),
     });
@@ -233,8 +250,8 @@ export async function executeMineRun(
   const pipeline = await measurePhase(timings, "pipeline", () =>
     runSignalPipeline(query, normalizedSignals, {
       effectiveAnalysisMode: mode.effectiveAnalysisMode,
-      allowJudgment: mode.allowedCalls >= 2,
-      allowSynthesis: mode.allowedCalls >= 3,
+      allowJudgment: ["balanced", "full"].includes(mode.effectiveAnalysisMode),
+      allowSynthesis: mode.effectiveAnalysisMode === "full",
       llm: llmMetadata,
     })
   );
@@ -278,13 +295,13 @@ export async function executeMineRun(
     dedupeGroups: pipeline.dedupeGroups,
     llmJudgments: pipeline.llmJudgments,
     brief: pipeline.brief,
-      metadata: {
-        searchedSources: researchSources,
-        errors,
-        notes: buildRunNotes({
-          downgradeReason: mode.downgradeReason,
-          rejectedCandidates:
-            quality.rejected.length + evidence.rejectedCandidates,
+    metadata: {
+      searchedSources: researchSources,
+      errors,
+      notes: buildRunNotes({
+        downgradeReason: mode.downgradeReason,
+        rejectedCandidates:
+          quality.rejected.length + evidence.rejectedCandidates,
         gapSearch: undefined,
         openWebTargets,
       }),
@@ -295,6 +312,13 @@ export async function executeMineRun(
       queryPlan: queryPlanResult.plan,
       executedSearches,
       searchDiagnostics,
+      hyperbrowserRun: buildHyperbrowserRunTrace({
+        candidates,
+        qualityRejected: quality.rejected,
+        rawSignals,
+        searchDiagnostics,
+        fetchedDocuments: research.diagnostics.fetchedDocuments,
+      }),
       sourceDebug: buildSourceDebug({
         sources: researchSources,
         candidates,
@@ -500,6 +524,167 @@ function buildSourceDebug({
   });
 }
 
+function buildHyperbrowserRunTrace({
+  candidates,
+  qualityRejected,
+  rawSignals,
+  searchDiagnostics,
+  fetchedDocuments,
+}: {
+  candidates: EvidenceCandidate[];
+  qualityRejected: EvidenceCandidate[];
+  rawSignals: RawSignal[];
+  searchDiagnostics: SearchDiagnostic[];
+  fetchedDocuments: Array<{
+    candidateId: string;
+    url: string;
+    markdown: string;
+    links?: string[];
+    outputFormats?: string[];
+    stealth?: "none" | "auto" | "ultra";
+    metadataTitle?: string;
+    metadataDescription?: string;
+    metadataSourceUrl?: string;
+    screenshot?: {
+      src: string;
+      byteLength: number;
+    };
+    pageSummary?: {
+      pageType?: string;
+      mainTopic?: string;
+      audience?: string;
+      evidenceValue?: string;
+      painSignals?: string[];
+    };
+    branding?: {
+      colorScheme?: string;
+      primaryColor?: string;
+      accentColor?: string;
+      logo?: string;
+      favicon?: string;
+      tone?: string;
+      confidence?: number;
+    };
+    richFetchStatus?: "used" | "fallback" | "basic";
+    richFetchError?: string;
+    pageTriage?: {
+      decision: "accept" | "reject" | "needs_more_context";
+      evidenceQuote?: string;
+      evidenceTitle?: string;
+      pageType?: string;
+      painCategory?: PainCategory;
+      hyperbrowserFit: number;
+      confidence: number;
+      reasoning: string[];
+      rejectionReason?: string;
+      followUpSearches: string[];
+      artifactSignals: Array<
+        "markdown" | "links" | "json" | "screenshot" | "branding"
+      >;
+    };
+    status: "success" | "error" | "skipped";
+    error?: string;
+  }>;
+}): HyperbrowserRunTrace {
+  const hyperbrowserCandidates = candidates.filter(
+    (candidate) => candidate.source === "hyperbrowser"
+  );
+  const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const rejectedIds = new Set(qualityRejected.map((candidate) => candidate.id));
+  const signalByUrl = new Map(
+    rawSignals.map((signal) => [
+      signal.canonicalUrl ?? signal.sourceUrl,
+      signal,
+    ])
+  );
+  const fetches = fetchedDocuments.map((document) => {
+    const candidate = candidateById.get(document.candidateId);
+    const signal = signalByUrl.get(document.url);
+    const links = document.links ?? [];
+
+    return {
+      candidateId: document.candidateId,
+      url: document.url,
+      title: candidate?.title,
+      status: document.status,
+      error: document.error,
+      markdownPreview: truncateRunEventText(document.markdown, 360),
+      markdownLength: document.markdown.length,
+      linkCount: links.length,
+      links: links.slice(0, 8),
+      outputFormats: document.outputFormats ?? ["markdown", "links"],
+      stealth: document.stealth,
+      metadataTitle: document.metadataTitle,
+      metadataDescription: document.metadataDescription,
+      metadataSourceUrl: document.metadataSourceUrl,
+      screenshot: document.screenshot,
+      pageSummary: document.pageSummary,
+      branding: document.branding,
+      richFetchStatus: document.richFetchStatus,
+      richFetchError: document.richFetchError,
+      pageTriage: document.pageTriage
+        ? {
+            decision: document.pageTriage.decision,
+            evidenceQuote: document.pageTriage.evidenceQuote
+              ? truncateRunEventText(document.pageTriage.evidenceQuote, 260)
+              : undefined,
+            evidenceTitle: document.pageTriage.evidenceTitle
+              ? truncateRunEventText(document.pageTriage.evidenceTitle, 120)
+              : undefined,
+            pageType: document.pageTriage.pageType,
+            painCategory: document.pageTriage.painCategory,
+            hyperbrowserFit: document.pageTriage.hyperbrowserFit,
+            confidence: document.pageTriage.confidence,
+            reasoning: document.pageTriage.reasoning.map((reason) =>
+              truncateRunEventText(reason, 180)
+            ),
+            rejectionReason: document.pageTriage.rejectionReason
+              ? truncateRunEventText(document.pageTriage.rejectionReason, 180)
+              : undefined,
+            followUpSearches: document.pageTriage.followUpSearches.map((search) =>
+              truncateRunEventText(search, 100)
+            ),
+            artifactSignals: document.pageTriage.artifactSignals,
+          }
+        : undefined,
+      qualityFlags: candidate?.qualityFlags ?? [],
+      evidenceAccepted: Boolean(signal),
+      acceptedQuote: signal ? truncateRunEventText(signal.quote, 260) : undefined,
+    };
+  });
+  const fetchOutputFormats = Array.from(
+    new Set(fetches.flatMap((fetch) => fetch.outputFormats))
+  );
+
+  return {
+    settings: {
+      timeoutMs: Number.parseInt(process.env.HYPERBROWSER_TIMEOUT_MS ?? "", 10) || 12_000,
+      fetchOutputFormats: fetchOutputFormats.length
+        ? fetchOutputFormats
+        : ["markdown", "links"],
+      mandatoryDiscovery: true,
+      maxFetchesPerRun: 5,
+    },
+    searches: searchDiagnostics
+      .filter((search) => search.source === "hyperbrowser")
+      .map((search) => ({
+        query: search.query,
+        reason: search.reason,
+        status: search.status,
+        durationMs: search.durationMs,
+        resultCount: search.rawSignals,
+        error: search.error,
+      })),
+    fetches,
+    discoveredResultCount: hyperbrowserCandidates.length,
+    fetchedPageCount: fetches.filter((fetch) => fetch.status === "success").length,
+    acceptedEvidenceCount: fetches.filter((fetch) => fetch.evidenceAccepted).length,
+    rejectedCandidateCount: hyperbrowserCandidates.filter((candidate) =>
+      rejectedIds.has(candidate.id)
+    ).length,
+  };
+}
+
 function buildEmptyLiveResult({
   query,
   sources,
@@ -510,6 +695,7 @@ function buildEmptyLiveResult({
   queryPlan,
   executedSearches,
   searchDiagnostics,
+  hyperbrowserRun,
   sourceDebug,
   timings,
 }: {
@@ -522,6 +708,7 @@ function buildEmptyLiveResult({
   queryPlan: MineResult["metadata"]["queryPlan"];
   executedSearches: MineResult["metadata"]["executedSearches"];
   searchDiagnostics: SearchDiagnostic[];
+  hyperbrowserRun: HyperbrowserRunTrace;
   sourceDebug: SourceDebugSummary[];
   timings: PhaseTiming[];
 }): MineResult {
@@ -569,6 +756,7 @@ function buildEmptyLiveResult({
       queryPlan,
       executedSearches,
       searchDiagnostics,
+      hyperbrowserRun,
       sourceDebug,
       timings,
       llm,

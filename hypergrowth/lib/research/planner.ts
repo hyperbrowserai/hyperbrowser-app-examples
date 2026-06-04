@@ -78,7 +78,8 @@ export async function createResearchPlan({
             constraints: [
               "Hacker News queries must be terse keyword searches, ideally 2 to 5 words.",
               "GitHub queries should use GitHub issue/search language and can include is:issue.",
-              "Hyperbrowser queries should target open-web pages worth fetching.",
+              "Hyperbrowser queries should target general open-web discovery (blogs, forums, docs) rather than duplicating GitHub or Hacker News searches.",
+              "Do not use site:github.com or site:news.ycombinator.com in Hyperbrowser queries; those platforms are handled by their own specific sources.",
               "For configured subreddits, Hyperbrowser may use site:reddit.com/r/{subreddit}; otherwise do not target Reddit by default.",
               "Avoid natural-language question queries for Hacker News.",
               "Avoid generic terms like developer pain points or market research.",
@@ -282,7 +283,8 @@ export async function createGapExpansionSearches({
               "Prefer sources with little or no accepted evidence so far.",
               "Use Hacker News terse keyword searches when Hacker News is selected.",
               "Use GitHub issue search syntax when GitHub is selected.",
-              "Use Hyperbrowser for open-web pages worth fetching.",
+              "Use Hyperbrowser for general open-web discovery (blogs, forums, docs) rather than duplicating GitHub or Hacker News searches.",
+              "Do not use site:github.com or site:news.ycombinator.com in Hyperbrowser queries.",
               "Do not target Reddit unless explicit subreddit targets were provided.",
             ],
             outputShape: {

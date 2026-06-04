@@ -63,6 +63,7 @@ export type MineRunEvent =
       step:
         | "query_expansion"
         | "candidate_triage"
+        | "page_triage"
         | "evidence_extraction"
         | "gap_expansion"
         | "judgment"

@@ -102,6 +102,87 @@ export type SourceDebugSummary = {
   }>;
 };
 
+export type HyperbrowserSearchTrace = {
+  query: string;
+  reason: "original" | "expanded";
+  status: "success" | "error";
+  durationMs: number;
+  resultCount: number;
+  error?: string;
+};
+
+export type HyperbrowserFetchTrace = {
+  candidateId: string;
+  url: string;
+  title?: string;
+  status: "success" | "error" | "skipped";
+  error?: string;
+  markdownPreview: string;
+  markdownLength: number;
+  linkCount: number;
+  links: string[];
+  outputFormats: string[];
+  stealth?: "none" | "auto" | "ultra";
+  metadataTitle?: string;
+  metadataDescription?: string;
+  metadataSourceUrl?: string;
+  screenshot?: {
+    src: string;
+    byteLength: number;
+  };
+  pageSummary?: {
+    pageType?: string;
+    mainTopic?: string;
+    audience?: string;
+    evidenceValue?: string;
+    painSignals?: string[];
+  };
+  branding?: {
+    colorScheme?: string;
+    primaryColor?: string;
+    accentColor?: string;
+    logo?: string;
+    favicon?: string;
+    tone?: string;
+    confidence?: number;
+  };
+  richFetchStatus?: "used" | "fallback" | "basic";
+  richFetchError?: string;
+  pageTriage?: {
+    decision: "accept" | "reject" | "needs_more_context";
+    evidenceQuote?: string;
+    evidenceTitle?: string;
+    pageType?: string;
+    painCategory?: PainCategory;
+    hyperbrowserFit: number;
+    confidence: number;
+    reasoning: string[];
+    rejectionReason?: string;
+    followUpSearches: string[];
+    artifactSignals: Array<
+      "markdown" | "links" | "json" | "screenshot" | "branding"
+    >;
+  };
+  qualityFlags: EvidenceQualityFlag[];
+  evidenceAccepted: boolean;
+  acceptedQuote?: string;
+};
+
+export type HyperbrowserRunTrace = {
+  settings: {
+    timeoutMs: number;
+    fetchOutputFormats: string[];
+    mandatoryDiscovery: boolean;
+    maxFetchesPerRun: number;
+  };
+  searches: HyperbrowserSearchTrace[];
+  fetches: HyperbrowserFetchTrace[];
+  discoveredResultCount: number;
+  fetchedPageCount: number;
+  acceptedEvidenceCount: number;
+  rejectedCandidateCount: number;
+};
+
 export type RawSignal = {
   source: SignalSource;
   sourceUrl: string;
@@ -131,7 +212,9 @@ export type EvidenceQualityFlag =
   | "promotional"
   | "too_short"
   | "weak_query_overlap"
-  | "thin_snippet";
+  | "thin_snippet"
+  | "llm_rejected"
+  | "needs_more_context";
 
 export type EvidenceCandidate = {
   id: string;
@@ -289,6 +372,7 @@ export type LLMUsageMetadata = {
   model?: string;
   queryExpansionMode: "disabled" | "used" | "fallback" | "deterministic";
   candidateTriageMode?: "disabled" | "used" | "fallback" | "deterministic";
+  pageTriageMode?: "disabled" | "used" | "fallback" | "deterministic";
   evidenceExtractionMode?: "disabled" | "used" | "fallback" | "partial";
   gapExpansionMode?: "disabled" | "used" | "fallback" | "deterministic";
   judgmentMode: "disabled" | "used" | "fallback" | "partial";
@@ -330,6 +414,7 @@ export type MineMetadata = {
   executedSearches?: ExecutedSearch[];
   searchDiagnostics?: SearchDiagnostic[];
   sourceDebug?: SourceDebugSummary[];
+  hyperbrowserRun?: HyperbrowserRunTrace;
   timings?: PhaseTiming[];
   llm: LLMUsageMetadata;
 };

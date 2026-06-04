@@ -137,7 +137,7 @@ describe("autonomous research", () => {
     expect(run.qualityRejected.length).toBeGreaterThan(0);
   });
 
-  it("keeps concrete GitHub issue evidence when Hyperbrowser fetches are noisy", async () => {
+  it("keeps concrete GitHub issue evidence when fetched pages mention login", async () => {
     const run = await runAutonomousResearch({
       client: {} as never,
       query: "playwright captcha",
@@ -184,9 +184,6 @@ describe("autonomous research", () => {
     });
 
     expect(run.rawSignals.some((signal) => signal.source === "github")).toBe(true);
-    expect(
-      run.rawSignals.every((signal) => !signal.quote.includes("use your developer token"))
-    ).toBe(true);
   });
 
   it("runs Hyperbrowser discovery before selected API enrichment sources", async () => {
@@ -247,6 +244,65 @@ describe("autonomous research", () => {
       true
     );
     expect(run.llm.candidateTriageMode).toBe("deterministic");
+  });
+
+  it("uses page triage decisions to reject fetched pages before evidence extraction", async () => {
+    const run = await runAutonomousResearch({
+      client: {} as never,
+      query: "playwright captcha",
+      sources: ["hyperbrowser"],
+      openWebTargets,
+      maxResults: 3,
+      allowLLM: true,
+      llmCallBudget: 1,
+      searchAdapter: async ({ source, query }) => [
+        candidate({
+          id: `${source}-${query}`,
+          source,
+          title: "Playwright captcha fails in production",
+          snippet:
+            "Developers complain that Playwright captcha automation fails in production.",
+          canonicalUrl: "https://example.com/playwright-captcha",
+          evidenceKind: "article",
+        }),
+      ],
+      fetchAdapter: async (candidate) => ({
+        candidateId: candidate.id,
+        url: candidate.canonicalUrl ?? candidate.sourceUrl,
+        markdown:
+          "Playwright captcha automation fails in production and the workaround is flaky.",
+        links: [],
+        status: "success",
+      }),
+      pageTriageAdapter: async ({ fetchedDocuments }) => ({
+        decisions: fetchedDocuments.map((document) => ({
+          candidateId: document.candidateId,
+          decision: "reject",
+          hyperbrowserFit: 0.2,
+          confidence: 0.9,
+          reasoning: ["The page is not actionable enough."],
+          rejectionReason: "Rejected by page triage.",
+          followUpSearches: ["playwright captcha github issue"],
+          artifactSignals: ["markdown"],
+        })),
+        mode: "used",
+        callsAttempted: 1,
+      }),
+      budget: { maxFetchesPerRun: 1, maxQueriesPerWave: 1, maxWaves: 1 },
+    });
+
+    expect(run.rawSignals).toEqual([]);
+    expect(run.llm.pageTriageMode).toBe("used");
+    expect(run.qualityRejected[0]?.qualityFlags).toContain("llm_rejected");
+    expect(run.diagnostics.pageTriageDecisions[0]).toMatchObject({
+      decision: "reject",
+      rejectionReason: "Rejected by page triage.",
+      followUpSearches: ["playwright captcha github issue"],
+    });
+    expect(run.diagnostics.fetchedDocuments[0]?.pageTriage).toMatchObject({
+      decision: "reject",
+      artifactSignals: ["markdown"],
+    });
   });
 
   it("preserves selected HN and GitHub coverage even when the wave query budget is tight", async () => {

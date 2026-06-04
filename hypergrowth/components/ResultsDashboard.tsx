@@ -8,9 +8,11 @@ import {
   Clock3,
   ExternalLink,
   FileText,
+  ImageIcon,
   Layers3,
   Megaphone,
   Network,
+  Palette,
   Quote,
   RadioTower,
   Route,
@@ -353,6 +355,8 @@ export function ResultsDashboard({
         </Panel>
       </div>
 
+      <BrowserEvidence result={result} />
+
       {/* Evidence Table */}
       <EvidenceTable signals={result.signals} scoreMap={scoreBySignalId} />
 
@@ -589,6 +593,7 @@ function RunTrace({
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
             <TraceMode label="Queries" value={llm.queryExpansionMode} />
             <TraceMode label="Triage" value={llm.candidateTriageMode} />
+            <TraceMode label="Pages" value={llm.pageTriageMode} />
             <TraceMode label="Extract" value={llm.evidenceExtractionMode} />
             <TraceMode label="Gaps" value={llm.gapExpansionMode} />
             <TraceMode label="Judge" value={llm.judgmentMode} />
@@ -874,6 +879,7 @@ function formatIntelligenceStep(step: string): string {
   const labels: Record<string, string> = {
     query_expansion: "Research plan",
     candidate_triage: "Fetch selection",
+    page_triage: "Page triage",
     evidence_extraction: "Evidence judgment",
     gap_expansion: "Expansion plan",
     judgment: "Signal scoring",
@@ -928,6 +934,397 @@ function formatCandidateCounts(search: {
   }
 
   return `${search.rawSignals} raw`;
+}
+
+function BrowserEvidence({ result }: { result: MineResult }) {
+  const run = result.metadata.hyperbrowserRun;
+
+  if (!run || (!run.searches.length && !run.fetches.length)) {
+    return null;
+  }
+
+  return (
+    <Panel
+      icon={<RadioTower size={15} className="text-source-web" />}
+      title="Browser Evidence"
+      accentColor="border-t-source-web"
+      headerRight={
+        <span className="text-xs font-semibold text-muted">
+          {run.discoveredResultCount} discovered, {run.fetchedPageCount} fetched
+        </span>
+      }
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.55fr)]">
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <BrowserStat
+              label="Searches"
+              value={run.searches.length}
+              tone="web"
+            />
+            <BrowserStat
+              label="Accepted"
+              value={run.acceptedEvidenceCount}
+              tone="success"
+            />
+            <BrowserStat
+              label="Rejected"
+              value={run.rejectedCandidateCount}
+              tone="warning"
+            />
+          </div>
+
+          <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2 text-xs font-black uppercase tracking-wide text-muted">
+              <span className="flex items-center gap-1.5">
+                <Search size={12} className="text-source-web" />
+                Hyperbrowser Search
+              </span>
+              <span className="font-mono text-muted">
+                {run.settings.timeoutMs}ms
+              </span>
+            </div>
+            <div className="max-h-[17rem] space-y-1.5 overflow-y-auto pr-1">
+              {run.searches.map((search) => (
+                <div
+                  key={`${search.query}-${search.reason}`}
+                  className="rounded border border-line/40 bg-white/[0.025] px-2.5 py-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-xs font-semibold leading-5 text-foreground">
+                      {search.query}
+                    </p>
+                    <span
+                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-xs font-bold ${
+                        search.status === "success"
+                          ? "border-success/25 bg-success/8 text-success"
+                          : "border-danger/25 bg-danger/8 text-danger"
+                      }`}
+                    >
+                      {search.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+                    <span>{search.resultCount} results</span>
+                    <span>{search.durationMs}ms</span>
+                    <span>{search.reason}</span>
+                  </p>
+                  {search.error ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-danger">
+                      {search.error}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-muted">
+              <FileText size={12} className="text-source-web" />
+              Hyperbrowser Fetch
+            </span>
+            <span className="rounded-full border border-source-web/25 bg-source-web/10 px-2.5 py-1 text-xs font-semibold text-source-web">
+              outputs: {run.settings.fetchOutputFormats.join(", ")}
+            </span>
+          </div>
+
+          {run.fetches.length ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {run.fetches.map((fetch) => (
+                <div
+                  key={`${fetch.candidateId}-${fetch.url}`}
+                  className="rounded-md border border-line/45 bg-white/[0.025] px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <a
+                        href={fetch.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group inline-flex max-w-full items-center gap-1.5 text-sm font-bold leading-5 text-foreground hover:text-source-web"
+                      >
+                        <span className="min-w-0 truncate">
+                          {fetch.title || formatUrlHost(fetch.url)}
+                        </span>
+                        <ExternalLink
+                          size={12}
+                          className="shrink-0 text-muted group-hover:text-source-web"
+                        />
+                      </a>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {formatUrlHost(fetch.url)}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-xs font-black uppercase ${
+                        fetch.status === "success"
+                          ? fetch.evidenceAccepted
+                            ? "border-success/25 bg-success/8 text-success"
+                            : "border-warning/25 bg-warning/8 text-warning"
+                          : "border-danger/25 bg-danger/8 text-danger"
+                      }`}
+                    >
+                      {fetch.status === "success"
+                        ? fetch.evidenceAccepted
+                          ? "accepted"
+                          : "reviewed"
+                        : fetch.status}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                    <span className="rounded border border-source-web/20 bg-source-web/8 px-1.5 py-0.5 font-mono text-source-web">
+                      {fetch.markdownLength.toLocaleString()} chars
+                    </span>
+                    <span className="rounded border border-source-web/20 bg-source-web/8 px-1.5 py-0.5 font-mono text-source-web">
+                      {fetch.linkCount} links
+                    </span>
+                    {fetch.richFetchStatus ? (
+                      <span
+                        className={`rounded border px-1.5 py-0.5 font-mono ${
+                          fetch.richFetchStatus === "used"
+                            ? "border-success/25 bg-success/8 text-success"
+                            : fetch.richFetchStatus === "fallback"
+                              ? "border-warning/25 bg-warning/8 text-warning"
+                              : "border-line/40 bg-black/20 text-muted"
+                        }`}
+                      >
+                        {fetch.richFetchStatus === "used"
+                          ? "rich fetch"
+                          : fetch.richFetchStatus}
+                      </span>
+                    ) : null}
+                    {fetch.screenshot ? (
+                      <span className="inline-flex items-center gap-1 rounded border border-accent-blue/25 bg-accent-blue/8 px-1.5 py-0.5 font-mono text-accent-blue">
+                        <ImageIcon size={10} />
+                        screenshot {formatBytes(fetch.screenshot.byteLength)}
+                      </span>
+                    ) : null}
+                    {fetch.stealth ? (
+                      <span className="rounded border border-accent-purple/25 bg-accent-purple/8 px-1.5 py-0.5 font-mono text-accent-purple">
+                        stealth {fetch.stealth}
+                      </span>
+                    ) : null}
+                    {fetch.qualityFlags.map((flag) => (
+                      <span
+                        key={flag}
+                        className="rounded border border-warning/25 bg-warning/8 px-1.5 py-0.5 text-warning"
+                      >
+                        {flag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {fetch.screenshot ? (
+                    <div className="mt-2 overflow-hidden rounded border border-line/40 bg-black/25">
+                      <div
+                        aria-hidden="true"
+                        className="h-32 w-full bg-cover bg-top"
+                        style={{
+                          backgroundImage: `url("${formatScreenshotSrc(fetch.screenshot.src)}")`,
+                        }}
+                      />
+                    </div>
+                  ) : null}
+
+                  {fetch.pageSummary ? (
+                    <div className="mt-2 rounded border border-accent-blue/20 bg-accent-blue/8 px-2 py-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5 font-bold text-accent-blue">
+                        <Braces size={11} />
+                        <span>{fetch.pageSummary.pageType ?? "page summary"}</span>
+                        {fetch.pageSummary.mainTopic ? (
+                          <span className="font-normal text-muted">
+                            {fetch.pageSummary.mainTopic}
+                          </span>
+                        ) : null}
+                      </div>
+                      {fetch.pageSummary.evidenceValue ? (
+                        <p className="mt-1 line-clamp-2 leading-5 text-foreground/85">
+                          {fetch.pageSummary.evidenceValue}
+                        </p>
+                      ) : null}
+                      {fetch.pageSummary.painSignals?.length ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {fetch.pageSummary.painSignals.slice(0, 3).map((signal) => (
+                            <span
+                              key={signal}
+                              className="max-w-full truncate rounded-full border border-accent-blue/20 bg-black/20 px-2 py-0.5 text-muted"
+                            >
+                              {signal}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {fetch.branding ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded border border-accent-purple/20 bg-accent-purple/8 px-2 py-1.5 text-xs text-accent-purple">
+                      <Palette size={11} />
+                      {fetch.branding.primaryColor ? (
+                        <span
+                          className="size-3 rounded-full border border-white/30"
+                          style={{ backgroundColor: fetch.branding.primaryColor }}
+                          title={`Primary ${fetch.branding.primaryColor}`}
+                        />
+                      ) : null}
+                      {fetch.branding.accentColor ? (
+                        <span
+                          className="size-3 rounded-full border border-white/30"
+                          style={{ backgroundColor: fetch.branding.accentColor }}
+                          title={`Accent ${fetch.branding.accentColor}`}
+                        />
+                      ) : null}
+                      <span className="truncate">
+                        {fetch.branding.tone ??
+                          fetch.branding.colorScheme ??
+                          "branding captured"}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {fetch.pageTriage ? (
+                    <div className="mt-2 rounded border border-line/40 bg-black/20 px-2 py-2 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 font-black uppercase ${
+                            fetch.pageTriage.decision === "accept"
+                              ? "border-success/25 bg-success/8 text-success"
+                              : fetch.pageTriage.decision === "needs_more_context"
+                                ? "border-accent-orange/25 bg-accent-orange/8 text-accent-orange"
+                                : "border-danger/25 bg-danger/8 text-danger"
+                          }`}
+                        >
+                          LLM {fetch.pageTriage.decision.replaceAll("_", " ")}
+                        </span>
+                        <span className="font-mono text-muted">
+                          conf {formatPercent(fetch.pageTriage.confidence)}
+                          {" / "}
+                          fit {formatPercent(fetch.pageTriage.hyperbrowserFit)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {fetch.pageTriage.pageType ? (
+                          <span className="rounded-full border border-line/40 bg-white/[0.025] px-2 py-0.5 text-muted">
+                            {fetch.pageTriage.pageType}
+                          </span>
+                        ) : null}
+                        {fetch.pageTriage.painCategory ? (
+                          <span className="rounded-full border border-accent-blue/20 bg-accent-blue/8 px-2 py-0.5 text-accent-blue">
+                            {fetch.pageTriage.painCategory.replaceAll("_", " ")}
+                          </span>
+                        ) : null}
+                        {fetch.pageTriage.artifactSignals.map((artifact) => (
+                          <span
+                            key={artifact}
+                            className="rounded-full border border-source-web/20 bg-source-web/8 px-2 py-0.5 text-source-web"
+                          >
+                            {artifact}
+                          </span>
+                        ))}
+                      </div>
+                      {fetch.pageTriage.reasoning.length ? (
+                        <p className="mt-1.5 line-clamp-2 leading-5 text-foreground/85">
+                          {fetch.pageTriage.reasoning.join(" ")}
+                        </p>
+                      ) : null}
+                      {fetch.pageTriage.evidenceQuote ? (
+                        <p className="mt-1.5 border-l-2 border-l-success bg-success/5 px-2 py-1.5 leading-5 text-foreground/90">
+                          &ldquo;{fetch.pageTriage.evidenceQuote}&rdquo;
+                        </p>
+                      ) : null}
+                      {fetch.pageTriage.rejectionReason ? (
+                        <p className="mt-1.5 line-clamp-2 leading-5 text-danger">
+                          {fetch.pageTriage.rejectionReason}
+                        </p>
+                      ) : null}
+                      {fetch.pageTriage.followUpSearches.length ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {fetch.pageTriage.followUpSearches.map((search) => (
+                            <span
+                              key={search}
+                              className="max-w-full truncate rounded-full border border-accent-orange/25 bg-accent-orange/8 px-2 py-0.5 text-accent-orange"
+                            >
+                              {search}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {fetch.acceptedQuote ? (
+                    <p className="mt-2 border-l-2 border-l-success bg-success/5 px-2 py-1.5 text-xs leading-5 text-foreground/90">
+                      &ldquo;{fetch.acceptedQuote}&rdquo;
+                    </p>
+                  ) : fetch.error ? (
+                    <p className="mt-2 line-clamp-3 rounded border border-danger/20 bg-danger/8 px-2 py-1.5 text-xs leading-5 text-danger">
+                      {fetch.error}
+                    </p>
+                  ) : (
+                    <p className="mt-2 line-clamp-3 rounded border border-line/30 bg-black/20 px-2 py-1.5 text-xs leading-5 text-muted">
+                      {fetch.richFetchError
+                        ? `Rich artifacts fell back: ${fetch.richFetchError}`
+                        : fetch.markdownPreview || "No markdown text returned."}
+                    </p>
+                  )}
+
+                  {fetch.links.length ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {fetch.links.slice(0, 4).map((link) => (
+                        <span
+                          key={link}
+                          title={link}
+                          className="max-w-full truncate rounded-full border border-line/40 bg-black/20 px-2 py-0.5 text-xs text-muted"
+                        >
+                          {formatUrlHost(link)}
+                        </span>
+                      ))}
+                      {fetch.links.length > 4 ? (
+                        <span className="rounded-full border border-line/40 px-2 py-0.5 text-xs text-muted">
+                          +{fetch.links.length - 4}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="No pages were selected for Hyperbrowser Fetch." />
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function BrowserStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "web" | "success" | "warning";
+}) {
+  const toneClass = {
+    web: "border-source-web/25 bg-source-web/8 text-source-web",
+    success: "border-success/25 bg-success/8 text-success",
+    warning: "border-warning/25 bg-warning/8 text-warning",
+  }[tone];
+
+  return (
+    <div className={`rounded-md border px-3 py-2.5 ${toneClass}`}>
+      <p className="text-xs font-bold uppercase tracking-wide opacity-80">
+        {label}
+      </p>
+      <p className="mt-1 text-xl font-black">{value}</p>
+    </div>
+  );
 }
 
 /* Evidence Table */
@@ -1676,4 +2073,41 @@ function formatDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function formatUrlHost(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function formatScreenshotSrc(src: string): string {
+  if (/^(data:image\/|https?:\/\/)/i.test(src)) {
+    return src;
+  }
+
+  return `data:image/webp;base64,${src}`;
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0%";
+  }
+
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }

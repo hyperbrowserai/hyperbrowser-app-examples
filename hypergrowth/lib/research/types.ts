@@ -1,10 +1,15 @@
 import type {
   EvidenceCandidate,
   ExecutedSearch,
+  PainCategory,
   RawSignal,
   SearchDiagnostic,
   SignalSource,
 } from "../types";
+import type {
+  HyperbrowserBrandingSummary,
+  HyperbrowserPageSummary,
+} from "../hyperbrowser";
 
 export type ResearchBudget = {
   maxWaves: number;
@@ -41,8 +46,44 @@ export type FetchedDocument = {
   url: string;
   markdown: string;
   links?: string[];
+  outputFormats?: string[];
+  stealth?: "none" | "auto" | "ultra";
+  metadataTitle?: string;
+  metadataDescription?: string;
+  metadataSourceUrl?: string;
+  screenshot?: {
+    src: string;
+    byteLength: number;
+  };
+  pageSummary?: HyperbrowserPageSummary;
+  branding?: HyperbrowserBrandingSummary;
+  richFetchStatus?: "used" | "fallback" | "basic";
+  richFetchError?: string;
+  pageTriage?: PageTriageDecision;
   status: "success" | "error" | "skipped";
   error?: string;
+};
+
+export type PageTriageArtifactSignal =
+  | "markdown"
+  | "links"
+  | "json"
+  | "screenshot"
+  | "branding";
+
+export type PageTriageDecision = {
+  candidateId: string;
+  decision: "accept" | "reject" | "needs_more_context";
+  evidenceQuote?: string;
+  evidenceTitle?: string;
+  pageType?: string;
+  painCategory?: PainCategory;
+  hyperbrowserFit: number;
+  confidence: number;
+  reasoning: string[];
+  rejectionReason?: string;
+  followUpSearches: string[];
+  artifactSignals: PageTriageArtifactSignal[];
 };
 
 export type EvidenceJudgment = {
@@ -57,6 +98,7 @@ export type ResearchDiagnostics = {
   plan: ResearchPlan;
   searches: SearchDiagnostic[];
   fetchedDocuments: FetchedDocument[];
+  pageTriageDecisions: PageTriageDecision[];
   judgments: EvidenceJudgment[];
   stopReason: string;
 };
@@ -72,6 +114,7 @@ export type ResearchResult = {
   llm: {
     queryExpansionMode: "disabled" | "used" | "fallback" | "deterministic";
     candidateTriageMode: "disabled" | "used" | "fallback" | "deterministic";
+    pageTriageMode: "disabled" | "used" | "fallback" | "deterministic";
     evidenceExtractionMode: "disabled" | "used" | "fallback" | "partial";
     gapExpansionMode: "disabled" | "used" | "fallback" | "deterministic";
     callsAttempted: number;
@@ -89,3 +132,18 @@ export type SearchAdapter = (input: {
 export type FetchAdapter = (
   candidate: EvidenceCandidate
 ) => Promise<FetchedDocument>;
+
+export type PageTriageResult = {
+  decisions: PageTriageDecision[];
+  mode: "disabled" | "used" | "fallback" | "deterministic";
+  callsAttempted: number;
+  failureReason?: string;
+};
+
+export type PageTriageAdapter = (input: {
+  query: string;
+  candidates: EvidenceCandidate[];
+  fetchedDocuments: FetchedDocument[];
+  maxDecisions: number;
+  allowLLM: boolean;
+}) => Promise<PageTriageResult>;

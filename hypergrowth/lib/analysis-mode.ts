@@ -8,7 +8,7 @@ const modeCalls: Record<AnalysisMode, number> = {
   deterministic: 0,
   lean: 1,
   balanced: 2,
-  full: 3,
+  full: 4,
 };
 
 const callsToMode: Record<number, AnalysisMode> = {
@@ -16,6 +16,7 @@ const callsToMode: Record<number, AnalysisMode> = {
   1: "lean",
   2: "balanced",
   3: "full",
+  4: "full",
 };
 
 export type AnalysisModeResolution = {
@@ -78,10 +79,11 @@ export function resolveAnalysisMode({
   };
 }
 
-function clampCalls(value: number): 0 | 1 | 2 | 3 {
+function clampCalls(value: number): number {
   if (Number.isNaN(value)) return 2;
   if (value <= 0) return 0;
   if (value === 1) return 1;
   if (value === 2) return 2;
-  return 3;
+  if (value === 3) return 3;
+  return 4;
 }

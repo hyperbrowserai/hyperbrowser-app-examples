@@ -6,8 +6,8 @@ import { getLLMClient } from "../llm/provider";
 import { truncateRunEventText } from "../run-events";
 import { painTerms, toolTerms } from "../taxonomy";
 import { matchedTerms, unique } from "../text";
-import type { EvidenceCandidate, RawSignal } from "../types";
-import type { EvidenceJudgment } from "./types";
+import type { EvidenceCandidate, EvidenceQualityFlag, RawSignal } from "../types";
+import type { EvidenceJudgment, PageTriageDecision } from "./types";
 
 const judgmentSchema = z.object({
   judgments: z.array(
@@ -24,11 +24,13 @@ const judgmentSchema = z.object({
 export async function judgeEvidence({
   query,
   candidates,
+  pageTriageDecisions = [],
   maxResults,
   allowLLM,
 }: {
   query: string;
   candidates: EvidenceCandidate[];
+  pageTriageDecisions?: PageTriageDecision[];
   maxResults: number;
   allowLLM: boolean;
 }): Promise<{
@@ -50,8 +52,32 @@ export async function judgeEvidence({
   const noiseRejected = postFetchQuality.accepted.filter((candidate) =>
     isNoiseEvidence(candidateText(candidate))
   );
+  const pageTriageById = new Map(
+    pageTriageDecisions.map((decision) => [decision.candidateId, decision])
+  );
+  const pageTriageRejected = postFetchQuality.accepted
+    .filter((candidate) => {
+      const decision = pageTriageById.get(candidate.id);
+      return (
+        decision?.decision === "reject" ||
+        decision?.decision === "needs_more_context"
+      );
+    })
+    .map((candidate) => {
+      const decision = pageTriageById.get(candidate.id);
+      const flag: EvidenceQualityFlag =
+        decision?.decision === "needs_more_context"
+          ? "needs_more_context"
+          : "llm_rejected";
+
+      return {
+        ...candidate,
+        qualityFlags: unique([...candidate.qualityFlags, flag]),
+      };
+    });
   const rejectedIds = new Set([
     ...noiseRejected.map((candidate) => candidate.id),
+    ...pageTriageRejected.map((candidate) => candidate.id),
     ...(!allowLLM ? promotionalFlagged.map((candidate) => candidate.id) : []),
   ]);
   const flaggedById = new Map(
@@ -63,6 +89,7 @@ export async function judgeEvidence({
   const qualityRejected = [
     ...postFetchQuality.rejected,
     ...noiseRejected,
+    ...pageTriageRejected,
     ...(!allowLLM ? promotionalFlagged : []),
   ];
 
@@ -71,6 +98,7 @@ export async function judgeEvidence({
       query,
       qualityAccepted,
       qualityRejected,
+      pageTriageDecisions,
       maxResults,
       mode: "disabled",
       callsAttempted: 0,
@@ -83,6 +111,7 @@ export async function judgeEvidence({
       query,
       qualityAccepted,
       qualityRejected,
+      pageTriageDecisions,
       maxResults,
       mode: "fallback",
       callsAttempted: 0,
@@ -150,22 +179,21 @@ export async function judgeEvidence({
     const rawSignals = judgmentsToRawSignals({
       judgments,
       candidates: qualityAccepted,
-      query,
       maxResults,
     });
-    const supplemented = supplementStructuredEvidence({
+    const withPageTriageSignals = supplementPageTriageEvidence({
       rawSignals,
       candidates: qualityAccepted,
-      query,
+      pageTriageDecisions,
       maxResults,
     });
 
     return {
-      rawSignals: supplemented,
+      rawSignals: withPageTriageSignals,
       qualityAccepted,
       qualityRejected,
       judgments,
-      mode: rawSignals.length === supplemented.length ? "used" : "partial",
+      mode: rawSignals.length === withPageTriageSignals.length ? "used" : "partial",
       callsAttempted: 1,
     };
   } catch (error) {
@@ -173,6 +201,7 @@ export async function judgeEvidence({
       query,
       qualityAccepted,
       qualityRejected,
+      pageTriageDecisions,
       maxResults,
       mode: "fallback",
       callsAttempted: 1,
@@ -191,6 +220,7 @@ function deterministicJudgment({
   query,
   qualityAccepted,
   qualityRejected,
+  pageTriageDecisions,
   maxResults,
   mode,
   callsAttempted,
@@ -199,6 +229,7 @@ function deterministicJudgment({
   query: string;
   qualityAccepted: EvidenceCandidate[];
   qualityRejected: EvidenceCandidate[];
+  pageTriageDecisions: PageTriageDecision[];
   maxResults: number;
   mode: "disabled" | "fallback";
   callsAttempted: number;
@@ -207,7 +238,12 @@ function deterministicJudgment({
   const credible = qualityAccepted.filter((candidate) =>
     hasDeveloperPainSignal(candidate, query)
   );
-  const rawSignals = deterministicExtract(credible, query).slice(0, maxResults);
+  const rawSignals = supplementPageTriageEvidence({
+    rawSignals: deterministicExtract(credible, query).slice(0, maxResults),
+    candidates: qualityAccepted,
+    pageTriageDecisions,
+    maxResults,
+  });
   const rawIds = new Set(rawSignals.map((signal) => signal.canonicalUrl ?? signal.sourceUrl));
   const judgments: EvidenceJudgment[] = qualityAccepted.map((candidate) => ({
     candidateId: candidate.id,
@@ -267,12 +303,10 @@ function sanitizeJudgments(
 function judgmentsToRawSignals({
   judgments,
   candidates,
-  query,
   maxResults,
 }: {
   judgments: EvidenceJudgment[];
   candidates: EvidenceCandidate[];
-  query: string;
   maxResults: number;
 }): RawSignal[] {
   const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
@@ -281,14 +315,20 @@ function judgmentsToRawSignals({
   for (const judgment of judgments) {
     if (!judgment.accepted || !judgment.quote) continue;
     const candidate = candidateById.get(judgment.candidateId);
-    if (!candidate || !hasDeveloperPainSignal(candidate, query)) continue;
-    const fallback = deterministicExtract([candidate], query)[0];
-    if (!fallback) continue;
+    if (!candidate) continue;
 
     signals.push({
-      ...fallback,
-      title: judgment.title?.trim() || fallback.title,
+      source: candidate.source,
+      sourceUrl: candidate.sourceUrl,
+      canonicalUrl: candidate.canonicalUrl,
+      title: judgment.title?.trim() || candidate.title,
       quote: judgment.quote,
+      author: candidate.author,
+      publishedAt: candidate.publishedAt,
+      engagement: candidate.engagement,
+      evidenceKind: candidate.evidenceKind ?? "web-page",
+      repo: candidate.repo,
+      raw: candidate.raw,
     });
     if (signals.length >= maxResults) break;
   }
@@ -296,27 +336,52 @@ function judgmentsToRawSignals({
   return signals;
 }
 
-function supplementStructuredEvidence({
+function supplementPageTriageEvidence({
   rawSignals,
   candidates,
-  query,
+  pageTriageDecisions,
   maxResults,
 }: {
   rawSignals: RawSignal[];
   candidates: EvidenceCandidate[];
-  query: string;
+  pageTriageDecisions: PageTriageDecision[];
   maxResults: number;
 }): RawSignal[] {
-  const seen = new Set(rawSignals.map((signal) => signal.canonicalUrl ?? signal.sourceUrl));
-  const supplemental = deterministicExtract(
-    candidates.filter(
-      (candidate) =>
-        (candidate.source === "github" || candidate.source === "hackernews") &&
-        !seen.has(candidate.canonicalUrl ?? candidate.sourceUrl) &&
-        hasDeveloperPainSignal(candidate, query)
-    ),
-    query
+  const seen = new Set(
+    rawSignals.map((signal) => signal.canonicalUrl ?? signal.sourceUrl)
   );
+  const candidateById = new Map(
+    candidates.map((candidate) => [candidate.id, candidate])
+  );
+  const supplemental: RawSignal[] = [];
+
+  for (const decision of pageTriageDecisions) {
+    if (decision.decision !== "accept" || !decision.evidenceQuote) continue;
+    const candidate = candidateById.get(decision.candidateId);
+    if (!candidate) continue;
+    const url = candidate.canonicalUrl ?? candidate.sourceUrl;
+    if (seen.has(url)) continue;
+
+    supplemental.push({
+      source: candidate.source,
+      sourceUrl: candidate.sourceUrl,
+      canonicalUrl: candidate.canonicalUrl,
+      title: decision.evidenceTitle?.trim() || candidate.title,
+      quote: decision.evidenceQuote,
+      author: candidate.author,
+      publishedAt: candidate.publishedAt,
+      engagement: candidate.engagement,
+      evidenceKind: candidate.evidenceKind ?? "web-page",
+      repo: candidate.repo,
+      raw: candidate.raw,
+      sourceReliabilityOverride:
+        typeof decision.confidence === "number"
+          ? decision.confidence
+          : candidate.sourceReliabilityOverride,
+    });
+    seen.add(url);
+    if (rawSignals.length + supplemental.length >= maxResults) break;
+  }
 
   return [...rawSignals, ...supplemental].slice(0, maxResults);
 }
@@ -347,7 +412,7 @@ export function isPromotionalEvidence(text: string): boolean {
       compact
     );
   const productPitch =
-    /\b(all-in-one|end-to-end|platform|solution|service|managed|native captcha|captcha solving service|anti-bot browser automation)\b/i.test(
+    /\b(all-in-one|end-to-end)\b/i.test(
       compact
     );
   const userPainLanguage =

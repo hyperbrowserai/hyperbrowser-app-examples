@@ -15,7 +15,7 @@ function candidateToRawSignal(
   query: string
 ): RawSignal | undefined {
   const quote = bestQuote(candidate.body || candidate.snippet, query);
-  if (quote.length < 40) return undefined;
+  if (quote.length < 15) return undefined;
 
   return {
     source: candidate.source,
