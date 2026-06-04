@@ -52,7 +52,8 @@ export async function executeMineRun(
 
   const { query, sources, maxResults, analysisMode, openWebTargets } =
     parsed.data;
-  await emit({ type: "run_started", query, analysisMode, sources });
+  const researchSources = ensureHyperbrowserSource(sources);
+  await emit({ type: "run_started", query, analysisMode, sources: researchSources });
 
   const provider = resolveLLMProvider();
 
@@ -98,7 +99,7 @@ export async function executeMineRun(
     runAutonomousResearch({
       client,
       query,
-      sources,
+      sources: researchSources,
       openWebTargets,
       maxResults,
       allowLLM: mode.allowedCalls >= 1,
@@ -120,7 +121,7 @@ export async function executeMineRun(
   const executedSearches = research.executedSearches;
   const searchDiagnostics = research.searchDiagnostics;
   const queryPlanResult = {
-    plan: researchPlanToQueryPlan(query, sources, research.diagnostics.plan),
+    plan: researchPlanToQueryPlan(query, researchSources, research.diagnostics.plan),
   };
 
   llmMetadata.queryExpansionMode = research.llm.queryExpansionMode;
@@ -155,7 +156,7 @@ export async function executeMineRun(
 
   if (rawSignals.length === 0) {
     const sourceDebug = buildSourceDebug({
-      sources,
+      sources: researchSources,
       candidates,
       qualityAccepted: quality.accepted,
       qualityRejected: quality.rejected,
@@ -164,7 +165,7 @@ export async function executeMineRun(
     });
     const result = buildEmptyLiveResult({
       query,
-      sources,
+      sources: researchSources,
       errors,
       notes: [
         `Rejected ${quality.rejected.length + evidence.rejectedCandidates} low-quality candidates before scoring.`,
@@ -193,7 +194,7 @@ export async function executeMineRun(
 
   if (normalizedSignals.length === 0) {
     const sourceDebug = buildSourceDebug({
-      sources,
+      sources: researchSources,
       candidates,
       qualityAccepted: quality.accepted,
       qualityRejected: quality.rejected,
@@ -202,7 +203,7 @@ export async function executeMineRun(
     });
     const result = buildEmptyLiveResult({
       query,
-      sources,
+      sources: researchSources,
       errors,
       notes: [
         "Live sources were fetched but did not produce enough normalized evidence.",
@@ -273,7 +274,7 @@ export async function executeMineRun(
     llmJudgments: pipeline.llmJudgments,
     brief: pipeline.brief,
       metadata: {
-        searchedSources: sources,
+        searchedSources: researchSources,
         errors,
         notes: buildRunNotes({
           downgradeReason: mode.downgradeReason,
@@ -290,7 +291,7 @@ export async function executeMineRun(
       executedSearches,
       searchDiagnostics,
       sourceDebug: buildSourceDebug({
-        sources,
+        sources: researchSources,
         candidates,
         qualityAccepted: quality.accepted,
         qualityRejected: quality.rejected,
@@ -359,6 +360,10 @@ async function emitRejectedCandidates(
 function joinFailureReasons(...reasons: Array<string | undefined>): string | undefined {
   const joined = reasons.filter(Boolean).join(" | ");
   return joined || undefined;
+}
+
+function ensureHyperbrowserSource(sources: SignalSource[]): SignalSource[] {
+  return sources.includes("hyperbrowser") ? sources : [...sources, "hyperbrowser"];
 }
 
 function researchPlanToQueryPlan(

@@ -77,28 +77,30 @@ Open [http://localhost:3000](http://localhost:3000).
 ## How It Works
 
 1. Enter a developer-market pain or topic, such as `Playwright captcha failures`.
-2. Select public sources: Hacker News, GitHub Issues, and open web via Hyperbrowser.
-3. HyperGrowth runs a bounded autonomous research loop. In lean, balanced, or full mode, an LLM can plan source-specific searches; otherwise a deterministic source-aware planner is used.
+2. Select enrichment sources: Hacker News and GitHub Issues. Hyperbrowser is always used as the discovery and page-reading layer for live runs.
+3. HyperGrowth runs a bounded autonomous research loop. In lean, balanced, or full mode, an LLM can plan Hyperbrowser-first searches; otherwise a deterministic source-aware planner is used.
 4. Source adapters collect `EvidenceCandidate` records instead of final signals:
-   - GitHub uses the Issues API, optionally with `GITHUB_TOKEN`, and enriches issue bodies plus a small comment sample.
-   - Hacker News uses only the Algolia API for stories and comments. Queries are kept terse because Algolia performs better on keyword searches such as `playwright captcha` than on long natural-language prompts.
-   - Hyperbrowser Search discovers broad open-web results across blogs, docs, workaround posts, and pages without clean APIs.
+   - Hyperbrowser Search runs first and discovers broad open-web results across blogs, docs, workaround posts, forums, Reddit permalinks, HN pages, GitHub pages, and pages without clean APIs.
+   - Hyperbrowser Fetch reads selected discovery results, returning markdown and links for downstream evidence judgment and enrichment planning.
+   - GitHub uses the Issues API, optionally with `GITHUB_TOKEN`, after Hyperbrowser discovery/fetch to corroborate discovered pain with issue bodies plus a small comment sample.
+   - Hacker News uses only the Algolia API for stories and comments after Hyperbrowser discovery/fetch. Queries are kept terse because Algolia performs better on keyword searches such as `playwright captcha` than on long natural-language prompts.
    - Reddit is not a direct source. Configured subreddits become `site:reddit.com/r/...` Hyperbrowser Search targets, and only canonical thread URLs are eligible for Fetch.
-5. A deterministic evidence-quality gate rejects login pages, block walls, empty-result pages, navigation chrome, thin snippets, and weak query-overlap candidates before scoring.
+5. A deterministic evidence-quality gate hard-rejects login pages, block walls, empty-result pages, and navigation chrome. Softer concerns like thin snippets, weak query overlap, or promotional language are carried forward as quality flags for the evidence judge instead of being silently deleted.
 6. The research critic chooses which Hyperbrowser Search results are worth fetching. In LLM-enabled modes this is contextual; otherwise it falls back to deterministic URL/snippet guards.
-7. Hyperbrowser Fetch enriches selected canonical URLs, especially open-web results returned by Hyperbrowser Search.
+7. Hyperbrowser Fetch enriches selected canonical URLs and exposes outbound links. HN/GitHub API enrichment runs only after this browser-discovered path.
    Reddit permalinks use Hyperbrowser stealth mode and are rejected if Fetch returns a login, search, landing, or block page.
 8. The evidence judge runs after Fetch, not before it. It accepts only grounded developer-authored pain, workaround, failure, bug, or buying/infra evidence. Block walls, search UI, cookie banners, generic marketing pages, and platform access failures are never promoted to signals.
 9. LLM-enabled modes can use contextual evidence judgment to choose quotes from fetched markdown and structured API results. The fallback extractor remains deterministic, and structured GitHub/HN evidence can still survive if the LLM drops it.
-10. HyperGrowth normalizes extracted raw evidence into `PainSignal` records with source URL, canonical URL, quote, author, timestamp, engagement, evidence kind, repository, matched terms, tools mentioned, category, and urgency.
-11. The scoring engine assigns deterministic scores for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, confidence, and total signal value.
-12. The dedupe engine compresses near-duplicate evidence using Jaccard similarity.
-13. Balanced and full modes send a small mixed batch to the LLM for contextual judgment. Invalid output gets one repair attempt, then deterministic fallback.
-14. Score fusion combines heuristic dimensions with LLM dimensions while keeping recency and source reliability deterministic.
-15. The clustering engine groups evidence by pain category and calculates cluster strength using frequency, source diversity, average pain intensity, and Hyperbrowser fit.
-16. The growth-play engine ranks actions by expected value, balancing commercial value, evidence strength, channel fit, confidence, and execution cost.
-17. Full mode can optionally refine cluster and play language, but every claim must cite existing signal IDs. If synthesis fails, deterministic synthesis is used.
-18. The API returns a growth brief plus UI-compatible fields for evidence quotes, clusters, content angles, outbound drafts, diagnostics, and LLM usage metadata.
+10. If evidence is thin, source coverage is incomplete, or selected sources have not contributed enough signal, full LLM-enabled research can run a gap-expansion pass that proposes a second wave of searches. This is reported through `gapExpansionMode`.
+11. HyperGrowth normalizes extracted raw evidence into `PainSignal` records with source URL, canonical URL, quote, author, timestamp, engagement, evidence kind, repository, matched terms, tools mentioned, category, and urgency.
+12. The scoring engine assigns deterministic scores for relevance, pain intensity, commercial intent, Hyperbrowser fit, recency, source reliability, confidence, and total signal value.
+13. The dedupe engine compresses near-duplicate evidence using Jaccard similarity.
+14. Balanced and full modes send a small mixed batch to the LLM for contextual judgment. Invalid output gets one repair attempt, then deterministic fallback.
+15. Score fusion combines heuristic dimensions with LLM dimensions while keeping recency and source reliability deterministic.
+16. The clustering engine groups evidence by pain category and calculates cluster strength using frequency, source diversity, average pain intensity, and Hyperbrowser fit.
+17. The growth-play engine ranks actions by expected value, balancing commercial value, evidence strength, channel fit, confidence, and execution cost.
+18. Full mode can optionally refine cluster and play language, but every claim must cite existing signal IDs. If synthesis fails, deterministic synthesis is used.
+19. The API returns a growth brief plus UI-compatible fields for evidence quotes, clusters, content angles, outbound drafts, diagnostics, and LLM usage metadata.
 
 ## Signal Pipeline
 
@@ -107,12 +109,14 @@ HyperGrowth treats growth research as an evidence-to-action pipeline:
 ```txt
 user query
 -> bounded autonomous research plan
--> source-native API collectors plus Hyperbrowser Search
--> evidence candidates
+-> Hyperbrowser Search discovery
+-> discovered web candidates
 -> pre-fetch quality gate
 -> optional LLM search-result critic
 -> Hyperbrowser Fetch enrichment for selected URLs
+-> HN/GitHub API enrichment and corroboration
 -> post-fetch evidence judge
+-> optional gap expansion and second research wave
 -> normalized pain signals
 -> deterministic signal scores
 -> deduped evidence groups
@@ -166,7 +170,7 @@ The API accepts `analysisMode`:
 - `deterministic`: no LLM calls; static query planning, deterministic scoring, clustering, and synthesis.
 - `lean`: one LLM phase for source-routed query expansion.
 - `balanced`: query expansion plus LLM judgment and score fusion. This is the default.
-- `full`: query expansion, LLM judgment, and grounded synthesis.
+- `full`: query expansion, LLM judgment, gap expansion when needed, and grounded synthesis when call budget allows.
 
 If no LLM provider is configured, live runs automatically downgrade to `live-deterministic`. The server can also clamp usage with `LLM_MAX_CALLS_PER_RUN`. Demo mode is always deterministic because it uses fixed sample evidence.
 

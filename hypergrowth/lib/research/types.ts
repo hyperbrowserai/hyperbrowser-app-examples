@@ -11,6 +11,7 @@ export type ResearchBudget = {
   maxQueriesPerWave: number;
   maxFetchesPerRun: number;
   maxEvidence: number;
+  maxEnrichmentSearches: number;
   requestTimeoutMs: number;
 };
 
@@ -40,6 +41,7 @@ export type FetchedDocument = {
   candidateId: string;
   url: string;
   markdown: string;
+  links?: string[];
   status: "success" | "error" | "skipped";
   error?: string;
 };

@@ -41,7 +41,7 @@ export async function judgeEvidence({
   failureReason?: string;
 }> {
   const postFetchQuality = applyEvidenceQualityGate(candidates, query);
-  const promotionalRejected = postFetchQuality.accepted
+  const promotionalFlagged = postFetchQuality.accepted
     .filter((candidate) => isPromotionalEvidence(candidateText(candidate)))
     .map((candidate) => ({
       ...candidate,
@@ -51,16 +51,19 @@ export async function judgeEvidence({
     isNoiseEvidence(candidateText(candidate))
   );
   const rejectedIds = new Set([
-    ...promotionalRejected.map((candidate) => candidate.id),
     ...noiseRejected.map((candidate) => candidate.id),
+    ...(!allowLLM ? promotionalFlagged.map((candidate) => candidate.id) : []),
   ]);
-  const qualityAccepted = postFetchQuality.accepted.filter(
-    (candidate) => !rejectedIds.has(candidate.id)
+  const flaggedById = new Map(
+    promotionalFlagged.map((candidate) => [candidate.id, candidate])
   );
+  const qualityAccepted = postFetchQuality.accepted
+    .filter((candidate) => !rejectedIds.has(candidate.id))
+    .map((candidate) => flaggedById.get(candidate.id) ?? candidate);
   const qualityRejected = [
     ...postFetchQuality.rejected,
     ...noiseRejected,
-    ...promotionalRejected,
+    ...(!allowLLM ? promotionalFlagged : []),
   ];
 
   if (!allowLLM) {
@@ -109,6 +112,7 @@ export async function judgeEvidence({
               title: candidate.title,
               text: truncateRunEventText(candidateText(candidate), 1400),
               evidenceKind: candidate.evidenceKind,
+              qualityFlags: candidate.qualityFlags,
             })),
             acceptOnlyIf: [
               "The text contains a concrete developer-authored complaint, failure, workaround, migration issue, tool limitation, production incident, or buying/infra pain.",
@@ -244,8 +248,8 @@ function sanitizeJudgments(
           : undefined;
       const quoteMatches =
         typeof quote === "string" &&
-        quote.length >= 40 &&
-        text.toLowerCase().includes(quote.toLowerCase().slice(0, 80)) &&
+        quote.length >= 15 &&
+        text.toLowerCase().includes(quote.toLowerCase().slice(0, 40)) &&
         !isNoiseEvidence(quote);
       const accepted =
         judgment.accepted &&

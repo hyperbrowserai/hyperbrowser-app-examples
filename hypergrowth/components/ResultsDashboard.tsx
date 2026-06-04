@@ -59,10 +59,10 @@ const sourceLabels: Record<SignalSource, string> = {
 };
 
 const sourceLongLabels: Record<SignalSource, string> = {
-  hackernews: "HN Algolia API",
-  github: "GitHub Issues API",
+  hackernews: "HN Enrichment API",
+  github: "GitHub Enrichment API",
   reddit: "Reddit target",
-  hyperbrowser: "Hyperbrowser Search",
+  hyperbrowser: "Hyperbrowser Search + Fetch",
 };
 
 const sourceTextClass: Record<SignalSource, string> = {
@@ -227,7 +227,7 @@ export function ResultsDashboard({
               <p className="text-[10px] font-bold uppercase tracking-wider text-accent">
                 Top Finding
               </p>
-              <h2 className="mt-1.5 text-[15px] font-black leading-snug tracking-tight text-foreground">
+              <h2 className="mt-1.5 text-[12px] font-black leading-snug tracking-tight text-foreground">
                 {brief?.topFinding ?? "No strong finding yet."}
               </h2>
             </div>
@@ -235,6 +235,11 @@ export function ResultsDashboard({
             <p className="text-[12px] leading-5 text-muted">
               {brief?.executiveSummary ??
                 "HyperGrowth will summarize clusters and expected-value growth plays here."}
+            </p>
+
+            <p className="inline-flex items-center gap-1.5 rounded-full border border-source-web/25 bg-source-web/8 px-2 py-1 text-[10px] font-semibold text-source-web">
+              <SourceIcon source="hyperbrowser" size={12} />
+              Hyperbrowser discovery and page fetch, enriched by selected APIs
             </p>
 
             <div className="rounded-md border border-accent/25 bg-accent/8 px-3 py-2.5">
@@ -403,11 +408,11 @@ function RunTrace({
     return (
       <Panel
         icon={<Route size={15} className="text-accent-blue" />}
-        title="Run Trace"
+        title="Research Trace"
         accentColor="border-t-accent-blue"
         headerRight={
           <span className="text-[11px] font-semibold text-accent-blue">
-            Blocking v1 run
+            Hyperbrowser-first run
           </span>
         }
       >
@@ -472,7 +477,7 @@ function RunTrace({
   return (
     <Panel
       icon={<Route size={15} className="text-accent-blue" />}
-      title="Run Trace"
+      title="Research Trace"
       accentColor="border-t-accent-blue"
       headerRight={
         <span className="text-[11px] font-semibold text-muted">
@@ -484,7 +489,7 @@ function RunTrace({
         <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
             <Search size={12} className="text-accent-blue" />
-            Search Plan
+            Discovery Plan
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {plan ? (
@@ -513,7 +518,7 @@ function RunTrace({
         <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
             <Network size={12} className="text-accent-orange" />
-            Source Work
+            Discovery & Enrichment
           </div>
           <div className="mt-1.5 space-y-1">
             {searches.length ? (
@@ -590,7 +595,7 @@ function LiveRunTrace({
   return (
     <Panel
       icon={<Route size={15} className="text-accent-blue" />}
-      title="Live Run Trace"
+      title="Live Research Trace"
       accentColor={failed ? "border-t-danger" : "border-t-accent-blue"}
       headerRight={
         <span
@@ -634,7 +639,7 @@ function LiveRunTrace({
         <div className="rounded-md border border-line/50 bg-black/20 px-3 py-2.5">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
             <Search size={12} className="text-accent-orange" />
-            Search Work
+            Discovery & Enrichment
           </div>
           <div className="mt-1.5 space-y-1">
             {sourceResults.length ? (
@@ -689,9 +694,11 @@ function LiveRunTrace({
               >
                 <div className="flex items-center justify-between gap-2 text-[10px]">
                   <span className="font-semibold text-foreground">
-                    {formatStrategy(event.step)}
+                    {formatIntelligenceStep(event.step)}
                   </span>
-                  <span className="font-mono text-muted">{event.mode}</span>
+                  <span className="font-mono text-muted">
+                    {formatTraceMode(event.mode)}
+                  </span>
                 </div>
                 <p className="line-clamp-1 text-[10px] text-muted">
                   {event.summary}
@@ -776,27 +783,27 @@ function TraceCount({
 
 const loadingPhases = [
   {
-    label: "Planning search",
-    detail: "Generating source-specific queries and Hyperbrowser targets.",
+    label: "Planning research",
+    detail: "Creating Hyperbrowser-first discovery queries from the request.",
   },
   {
-    label: "Searching sources",
-    detail: "Calling GitHub, HN, and Hyperbrowser Search where enabled.",
+    label: "Discovering pages",
+    detail: "Searching the open web with Hyperbrowser before API enrichment.",
   },
   {
-    label: "Fetching evidence",
-    detail: "Enriching selected canonical URLs with Hyperbrowser Fetch.",
+    label: "Fetching pages",
+    detail: "Reading selected URLs with Hyperbrowser Fetch for full-page context.",
   },
   {
-    label: "Filtering weak evidence",
-    detail: "Rejecting login walls, thin snippets, and weak overlap.",
+    label: "Enriching APIs",
+    detail: "Corroborating with Hacker News and GitHub where selected.",
   },
   {
-    label: "Running LLM review",
-    detail: "Triage, extraction, judgment, and gap planning when configured.",
+    label: "Judging evidence",
+    detail: "Filtering weak pages, ads, login walls, and low-overlap snippets.",
   },
   {
-    label: "Drafting growth plays",
+    label: "Building plays",
     detail: "Clustering pain signals and preparing the growth brief.",
   },
 ];
@@ -809,6 +816,7 @@ function TraceMode({
   value?: string;
 }) {
   const mode = value ?? "disabled";
+  const labelValue = formatTraceMode(mode);
   const modeClass =
     mode === "used"
       ? "text-success"
@@ -819,13 +827,50 @@ function TraceMode({
   return (
     <span className="flex items-center justify-between gap-2 border-b border-line/30 py-0.5 last:border-b-0">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-semibold ${modeClass}`}>{mode}</span>
+      <span className={`font-mono font-semibold ${modeClass}`}>{labelValue}</span>
     </span>
   );
 }
 
 function formatStrategy(strategy: string): string {
   return strategy.replaceAll("-", " ");
+}
+
+function formatIntelligenceStep(step: string): string {
+  const labels: Record<string, string> = {
+    query_expansion: "Research plan",
+    candidate_triage: "Fetch selection",
+    evidence_extraction: "Evidence judgment",
+    gap_expansion: "Expansion plan",
+    judgment: "Signal scoring",
+    synthesis: "Growth synthesis",
+  };
+
+  return labels[step] ?? formatStrategy(step);
+}
+
+function formatTraceMode(mode: string): string {
+  if (mode === "partial") {
+    return "hybrid";
+  }
+
+  return mode;
+}
+
+function getEvidenceTrail(signal: PainSignal): string {
+  if (signal.source === "hyperbrowser") {
+    return "Discovered and fetched by Hyperbrowser";
+  }
+
+  if (signal.source === "hackernews") {
+    return "Hyperbrowser-led research, enriched by HN";
+  }
+
+  if (signal.source === "github") {
+    return "Hyperbrowser-led research, enriched by GitHub";
+  }
+
+  return "Community signal enrichment";
 }
 
 function formatCandidateCounts(search: {
@@ -956,9 +1001,9 @@ function EvidenceRow({
           className="group block"
           title={signal.title}
         >
-        <p className="line-clamp-3 text-[12px] leading-5 text-foreground/90 transition group-hover:text-accent-blue">
-          &ldquo;{signal.quote}&rdquo;
-        </p>
+          <p className="line-clamp-3 text-[12px] leading-5 text-foreground/90 transition group-hover:text-accent-blue">
+            &ldquo;{signal.quote}&rdquo;
+          </p>
         </a>
       </td>
 
@@ -991,6 +1036,9 @@ function EvidenceRow({
         <span className="rounded-full border border-line bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold capitalize text-muted">
           {signal.evidenceKind ?? "signal"}
         </span>
+        <p className="mt-1 max-w-[150px] whitespace-normal text-[9px] leading-3 text-muted/75">
+          {getEvidenceTrail(signal)}
+        </p>
       </td>
 
       {/* Score */}
@@ -1203,7 +1251,7 @@ function Diagnostics({ result }: { result: MineResult }) {
 
           {/* Source Diagnostics */}
           <DiagnosticBlock
-            title="Source Diagnostics"
+            title="Research Sources"
             icon={<BarChart3 size={11} className="text-accent-orange" />}
           >
             {searches.length ? (
@@ -1298,10 +1346,10 @@ function Diagnostics({ result }: { result: MineResult }) {
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-muted">
                 <Network size={12} className="text-accent-blue" />
-                Source Funnel Debug
+                Research Funnel Debug
               </span>
               <span className="text-[10px] text-muted">
-                raw to quality to evidence to final
+                discovery to fetch to enrichment to evidence
               </span>
             </div>
             <div className="overflow-x-auto">
@@ -1402,7 +1450,7 @@ function Diagnostics({ result }: { result: MineResult }) {
               </table>
             </div>
             <p className="mt-2 text-[10px] leading-4 text-muted">
-              Quality shows accepted/rejected before LLM triage. Evidence is
+              Quality shows accepted/rejected before LLM judgment. Evidence is
               quote extraction output. Final is normalized evidence used by the
               dashboard.
             </p>

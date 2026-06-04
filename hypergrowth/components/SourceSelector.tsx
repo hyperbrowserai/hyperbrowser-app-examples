@@ -5,7 +5,6 @@ import type { SignalSource } from "@/lib/types";
 const sources: {
   id: SignalSource;
   label: string;
-  dotColor: string;
   selectedBorder: string;
   selectedBg: string;
   selectedText: string;
@@ -13,7 +12,6 @@ const sources: {
   {
     id: "hackernews",
     label: "Hacker News",
-    dotColor: "bg-source-hn",
     selectedBorder: "border-source-hn/60",
     selectedBg: "bg-source-hn/12",
     selectedText: "text-source-hn",
@@ -21,18 +19,9 @@ const sources: {
   {
     id: "github",
     label: "GitHub",
-    dotColor: "bg-source-github",
     selectedBorder: "border-source-github/60",
     selectedBg: "bg-source-github/12",
     selectedText: "text-source-github",
-  },
-  {
-    id: "hyperbrowser",
-    label: "Hyperbrowser",
-    dotColor: "bg-source-web",
-    selectedBorder: "border-source-web/60",
-    selectedBg: "bg-source-web/12",
-    selectedText: "text-source-web",
   },
 ];
 

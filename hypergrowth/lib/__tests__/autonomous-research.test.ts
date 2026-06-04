@@ -15,6 +15,11 @@ const openWebTargets: OpenWebTargets = {
   redditSubreddits: ["webscraping", "playwright"],
 };
 
+const openWebTargetsWithoutReddit: OpenWebTargets = {
+  includeBroadWeb: true,
+  redditSubreddits: [],
+};
+
 describe("autonomous research", () => {
   it("plans terse Hacker News keyword queries for long problem statements", () => {
     const plan = buildStaticResearchPlan(
@@ -23,11 +28,15 @@ describe("autonomous research", () => {
       openWebTargets
     );
 
-    expect(plan.waves[0].searches[0]).toMatchObject({
+    expect(plan.waves[0].searches[0]?.source).toBe("hyperbrowser");
+    const hnSearch = plan.waves[0].searches.find(
+      (search) => search.source === "hackernews"
+    );
+    expect(hnSearch).toMatchObject({
       source: "hackernews",
       query: "browser automation captcha",
     });
-    expect(plan.waves[0].searches[0].query.split(/\s+/).length).toBeLessThanOrEqual(5);
+    expect(hnSearch?.query.split(/\s+/).length).toBeLessThanOrEqual(5);
   });
 
   it("does not let generic words like cause dominate Hacker News queries", () => {
@@ -37,10 +46,28 @@ describe("autonomous research", () => {
       openWebTargets
     );
 
-    expect(plan.waves[0].searches.map((search) => search.query)).toEqual([
+    expect(
+      plan.waves[0].searches
+        .filter((search) => search.source === "hackernews")
+        .map((search) => search.query)
+    ).toEqual([
       "browser automation captcha",
       "scraping captcha",
     ]);
+  });
+
+  it("does not generate Reddit-targeted searches unless explicit targets are configured", () => {
+    const plan = buildStaticResearchPlan(
+      "playwright captcha blocked in production",
+      ["hackernews", "github"],
+      openWebTargetsWithoutReddit
+    );
+
+    expect(
+      plan.waves[0].searches.some((search) =>
+        /site:reddit\.com/i.test(search.query)
+      )
+    ).toBe(false);
   });
 
   it("accepts common LLM JSON variants for planner and rejected judgments", () => {
@@ -162,6 +189,92 @@ describe("autonomous research", () => {
     ).toBe(true);
   });
 
+  it("runs Hyperbrowser discovery before selected API enrichment sources", async () => {
+    const searchedSources: SignalSource[] = [];
+    const run = await runAutonomousResearch({
+      client: {} as never,
+      query: "playwright captcha",
+      sources: ["github"],
+      openWebTargets,
+      maxResults: 3,
+      allowLLM: false,
+      searchAdapter: async ({ source, query }) => {
+        searchedSources.push(source);
+
+        if (source === "hyperbrowser") {
+          return [
+            candidate({
+              id: "web-result",
+              source,
+              title: "Playwright captcha workaround discussion",
+              snippet:
+                "Developers complain that Playwright captcha workarounds fail in production.",
+              canonicalUrl: "https://example.com/playwright-captcha",
+              evidenceKind: "article",
+            }),
+          ];
+        }
+
+        return [
+          candidate({
+            id: `github-${query}`,
+            source,
+            title: "Playwright captcha fails in production",
+            snippet:
+              "We cannot get Playwright past captcha in production and the workaround is flaky.",
+            body:
+              "We cannot get Playwright past captcha in production and the workaround is flaky.",
+            canonicalUrl: "https://github.com/example/project/issues/2",
+            evidenceKind: "issue",
+          }),
+        ];
+      },
+      fetchAdapter: async (candidate) => ({
+        candidateId: candidate.id,
+        url: candidate.canonicalUrl ?? candidate.sourceUrl,
+        markdown:
+          "Developers complain that Playwright captcha workarounds fail in production.",
+        links: ["https://github.com/example/project/issues/2"],
+        status: "success",
+      }),
+      budget: { maxFetchesPerRun: 1, maxQueriesPerWave: 4 },
+    });
+
+    expect(searchedSources[0]).toBe("hyperbrowser");
+    expect(searchedSources).toContain("github");
+    expect(run.executedSearches[0]?.source).toBe("hyperbrowser");
+    expect(run.candidates.some((candidate) => candidate.source === "github")).toBe(
+      true
+    );
+  });
+
+  it("preserves selected HN and GitHub coverage even when the wave query budget is tight", async () => {
+    const searchedSources: SignalSource[] = [];
+
+    await runAutonomousResearch({
+      client: {} as never,
+      query: "captcha blockage autonomous searches",
+      sources: ["hackernews", "github"],
+      openWebTargets: openWebTargetsWithoutReddit,
+      maxResults: 24,
+      allowLLM: false,
+      searchAdapter: async ({ source, maxResults }) => {
+        searchedSources.push(source);
+        expect(maxResults).toBeGreaterThanOrEqual(5);
+        return [];
+      },
+      budget: {
+        maxFetchesPerRun: 0,
+        maxQueriesPerWave: 1,
+        maxWaves: 1,
+      },
+    });
+
+    expect(searchedSources[0]).toBe("hyperbrowser");
+    expect(searchedSources).toContain("hackernews");
+    expect(searchedSources).toContain("github");
+  });
+
   it("rejects ads, hiring copy, and vendor self-promotion as evidence", async () => {
     const run = await runAutonomousResearch({
       client: {} as never,
@@ -170,30 +283,33 @@ describe("autonomous research", () => {
       openWebTargets,
       maxResults: 3,
       allowLLM: false,
-      searchAdapter: async ({ source }) => [
-        candidate({
-          id: "hn-ad",
-          source,
-          title: "Developer advocate for anti-bot browser automation",
-          snippet:
-            "We focus on hard technical problems (anti-bot, browser automation, fingerprinting, captcha solving).",
-          body:
-            "We focus on hard technical problems (anti-bot, browser automation, fingerprinting, captcha solving).",
-          canonicalUrl: "https://news.ycombinator.com/item?id=1",
-          evidenceKind: "comment",
-        }),
-        candidate({
-          id: "hn-pain",
-          source,
-          title: "Debugging captcha automation is painful",
-          snippet:
-            "When debugging image selection captchas, logs do not tell you why the agent clicked the wrong tiles.",
-          body:
-            "When debugging image selection captchas, logs do not tell you why the agent clicked the wrong tiles. I found myself staring at execution logs and just wanted to watch it work.",
-          canonicalUrl: "https://news.ycombinator.com/item?id=2",
-          evidenceKind: "comment",
-        }),
-      ],
+      searchAdapter: async ({ source }) =>
+        source === "hyperbrowser"
+          ? []
+          : [
+              candidate({
+                id: "hn-ad",
+                source,
+                title: "Developer advocate for anti-bot browser automation",
+                snippet:
+                  "We focus on hard technical problems (anti-bot, browser automation, fingerprinting, captcha solving).",
+                body:
+                  "We focus on hard technical problems (anti-bot, browser automation, fingerprinting, captcha solving).",
+                canonicalUrl: "https://news.ycombinator.com/item?id=1",
+                evidenceKind: "comment",
+              }),
+              candidate({
+                id: "hn-pain",
+                source,
+                title: "Debugging captcha automation is painful",
+                snippet:
+                  "When debugging image selection captchas, logs do not tell you why the agent clicked the wrong tiles.",
+                body:
+                  "When debugging image selection captchas, logs do not tell you why the agent clicked the wrong tiles. I found myself staring at execution logs and just wanted to watch it work.",
+                canonicalUrl: "https://news.ycombinator.com/item?id=2",
+                evidenceKind: "comment",
+              }),
+            ],
       budget: { maxFetchesPerRun: 0, maxQueriesPerWave: 1 },
     });
 

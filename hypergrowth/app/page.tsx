@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
+import { SourceIcon } from "@/components/SourceIcon";
 import { SourceSelector } from "@/components/SourceSelector";
 import { buildDemoResult } from "@/lib/demo-data";
 import { streamMineRun } from "@/lib/client/run-stream";
@@ -34,8 +35,7 @@ const analysisModes: Array<{
 
 const maxResultOptions = [3, 6, 12, 24, 30] as const;
 
-const defaultRedditTargets =
-  "webscraping, playwright, puppeteer, automation, webdev";
+const defaultRedditTargets = "";
 
 export default function Home() {
   const [query, setQuery] = useState(
@@ -44,7 +44,6 @@ export default function Home() {
   const [sources, setSources] = useState<SignalSource[]>([
     "hackernews",
     "github",
-    "hyperbrowser",
   ]);
   const [includeBroadWeb, setIncludeBroadWeb] = useState(true);
   const [redditTargets, setRedditTargets] = useState(defaultRedditTargets);
@@ -137,7 +136,7 @@ export default function Home() {
           onSubmit={handleSubmit}
           className="rounded-lg border border-line bg-panel/80 shadow-[0_16px_64px_rgba(0,0,0,0.32)] backdrop-blur-xl"
         >
-          {/* Row 1: Branding, query, and sources */}
+          {/* Row 1: Branding, query, discovery, and enrichment */}
           <div className="flex flex-col gap-3 border-b border-line/60 px-4 py-3 lg:flex-row lg:items-center">
             {/* Branding */}
             <div className="flex shrink-0 items-center gap-2.5">
@@ -177,10 +176,28 @@ export default function Home() {
 
             <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
 
-            {/* Sources */}
+            {/* Discovery Engine */}
             <div className="shrink-0">
               <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
-                Sources
+                Discovery
+              </span>
+              <div className="inline-flex h-8 items-center gap-2 rounded-full border border-source-web/50 bg-source-web/12 px-3 text-xs font-semibold text-source-web">
+                <span className="grid size-5 place-items-center rounded bg-white/[0.04]">
+                  <SourceIcon source="hyperbrowser" size={14} />
+                </span>
+                Hyperbrowser
+                <span className="rounded-full border border-source-web/30 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-source-web/80">
+                  Search + Fetch
+                </span>
+              </div>
+            </div>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
+
+            {/* Enrichment Sources */}
+            <div className="shrink-0">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+                Enrichment
               </span>
               <SourceSelector value={sources} onChange={setSources} />
             </div>
@@ -188,36 +205,32 @@ export default function Home() {
 
           {/* Row 2: Hyperbrowser targets, analysis mode, max results, submit */}
           <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-end">
-            {/* Subreddits are targets for Hyperbrowser open-web search */}
-            {sources.includes("hyperbrowser") ? (
-              <div className="flex min-w-0 flex-1 items-end gap-3">
-                <label className="block min-w-0 flex-1">
-                  <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
-                    Subreddits
-                  </span>
-                  <input
-                    value={redditTargets}
-                    onChange={(event) => setRedditTargets(event.target.value)}
-                    className="h-9 w-full rounded-md border border-line bg-black/30 px-3 text-[13px] text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60"
-                    placeholder="webscraping, playwright, automation"
-                  />
-                </label>
+            {/* Open-web targets steer Hyperbrowser discovery. */}
+            <div className="flex min-w-0 flex-1 items-end gap-3">
+              <label className="block min-w-0 flex-1">
+                <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted">
+                  Open-Web Targets
+                </span>
+                <input
+                  value={redditTargets}
+                  onChange={(event) => setRedditTargets(event.target.value)}
+                  className="h-9 w-full rounded-md border border-line bg-black/30 px-3 text-[13px] text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60"
+                  placeholder="webscraping, playwright, automation"
+                />
+              </label>
 
-                <label className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-line bg-black/20 px-3 text-[11px] font-semibold text-muted transition hover:border-accent/30">
-                  <input
-                    type="checkbox"
-                    checked={includeBroadWeb}
-                    onChange={(event) =>
-                      setIncludeBroadWeb(event.target.checked)
-                    }
-                    className="size-3.5 accent-[var(--accent)]"
-                  />
-                  Broad web
-                </label>
-              </div>
-            ) : (
-              <div className="flex-1" />
-            )}
+              <label className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-line bg-black/20 px-3 text-[11px] font-semibold text-muted transition hover:border-accent/30">
+                <input
+                  type="checkbox"
+                  checked={includeBroadWeb}
+                  onChange={(event) =>
+                    setIncludeBroadWeb(event.target.checked)
+                  }
+                  className="size-3.5 accent-[var(--accent)]"
+                />
+                Broad web
+              </label>
+            </div>
 
             <div className="mx-1 hidden h-8 w-px bg-line/60 lg:block" />
 
@@ -296,9 +309,8 @@ export default function Home() {
             </button>
           </div>
 
-          {sources.includes("hyperbrowser") &&
-          (subredditValidation.valid.length > 0 ||
-            subredditValidation.invalid.length > 0) ? (
+          {subredditValidation.valid.length > 0 ||
+          subredditValidation.invalid.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 border-t border-line/50 px-4 py-2">
               {subredditValidation.valid.map((subreddit) => (
                 <span
@@ -332,7 +344,7 @@ export default function Home() {
           isLoading={isLoading}
           activeRun={{
             query,
-            sources,
+            sources: ["hyperbrowser", ...sources],
             analysisMode,
             maxResults,
             includeBroadWeb,

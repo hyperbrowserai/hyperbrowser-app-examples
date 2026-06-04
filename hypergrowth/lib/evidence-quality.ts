@@ -31,7 +31,7 @@ export function applyEvidenceQualityGate(
     ]) as EvidenceQualityFlag[];
     const next = { ...candidate, qualityFlags };
 
-    if (qualityFlags.length > 0) {
+    if (qualityFlags.some(isHardRejectFlag)) {
       rejected.push(next);
     } else {
       accepted.push(next);
@@ -39,6 +39,15 @@ export function applyEvidenceQualityGate(
   }
 
   return { accepted, rejected };
+}
+
+function isHardRejectFlag(flag: EvidenceQualityFlag): boolean {
+  return (
+    flag === "login_required" ||
+    flag === "blocked" ||
+    flag === "no_results" ||
+    flag === "navigation_chrome"
+  );
 }
 
 export function isNoiseEvidence(text: string): boolean {

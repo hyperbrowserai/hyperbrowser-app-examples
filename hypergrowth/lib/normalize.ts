@@ -19,7 +19,7 @@ export function normalizeSignals(
 
   return rawSignals
     .map((raw, index) => normalizeSignal(raw, queryTerms, extractedAt, index))
-    .filter((signal) => signal.quote.length >= 40);
+    .filter((signal) => signal.quote.length >= 15);
 }
 
 function normalizeSignal(
