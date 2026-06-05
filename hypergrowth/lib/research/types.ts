@@ -94,11 +94,29 @@ export type EvidenceJudgment = {
   rationale: string;
 };
 
+export type ResearchFeedback = {
+  summary: string[];
+  rejectedPages: Array<{
+    candidateId: string;
+    source: SignalSource;
+    title: string;
+    url: string;
+    originalSearchQuery?: string;
+    rejectionReason: string;
+    pageType?: string;
+    confidence: number;
+    reasoning: string[];
+    followUpSearches: string[];
+  }>;
+  suggestedSearches: string[];
+};
+
 export type ResearchDiagnostics = {
   plan: ResearchPlan;
   searches: SearchDiagnostic[];
   fetchedDocuments: FetchedDocument[];
   pageTriageDecisions: PageTriageDecision[];
+  feedback: ResearchFeedback[];
   judgments: EvidenceJudgment[];
   stopReason: string;
 };
@@ -145,5 +163,5 @@ export type PageTriageAdapter = (input: {
   candidates: EvidenceCandidate[];
   fetchedDocuments: FetchedDocument[];
   maxDecisions: number;
-  allowLLM: boolean;
+  remainingLLMCalls: number;
 }) => Promise<PageTriageResult>;

@@ -1,5 +1,5 @@
 import { extractJsonObject } from "./json-utils";
-import { getLLMClient } from "./llm/provider";
+import { getLLMClient, withReasoningEffort } from "./llm/provider";
 import type {
   GrowthPlay,
   MinePipelineResult,
@@ -81,42 +81,44 @@ async function synthesizeWithLLM(input: SynthesisInput): Promise<Synthesis> {
   if (!llm) throw new Error("No LLM provider configured.");
 
   const allowedSignalIds = new Set(input.signals.map((signal) => signal.id));
-  const response = await llm.client.chat.completions.create({
-    model: llm.metadata.model ?? "gpt-4.1-mini",
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a growth engineer for a developer-tools company. You refine already-scored evidence into concise growth recommendations. Use only provided evidence. Every cluster and growth play must cite existing signal IDs. Do not invent URLs, quotes, companies, metrics, or sources. Return valid JSON only.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          query: input.query,
-          constraints: [
-            "Keep cluster ids from the provided clusters.",
-            "Keep growth play ids from the provided candidate plays.",
-            "Every cited signal id must exist in signals.",
-            "Do not remove score objects if present.",
-            "Prefer concrete actions over generic strategy language.",
-          ],
-          requiredShape: {
-            clusters:
-              "PainCluster[] with id,title,summary,frequency,urgency,representativeQuotes,relatedTools,signalIds,sourceDiversity,averagePainIntensity,averageHyperbrowserFit,clusterStrength,confidence",
-            growthPlays:
-              "GrowthPlay[] with id,channel,title,insight,recommendedAction,copyDraft,supportingSignalIds,score",
-            outboundDrafts: "string[]",
-            contentAngles: "string[]",
-          },
-          signals: input.signals,
-          signalScores: input.signalScores,
-          clusters: input.clusters,
-          candidatePlays: input.candidatePlays,
-        }),
-      },
-    ],
-  });
+  const response = await llm.client.chat.completions.create(
+    withReasoningEffort({
+      model: llm.metadata.model ?? "gpt-4.1-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a growth engineer for a developer-tools company. You refine already-scored evidence into concise growth recommendations. Use only provided evidence. Every cluster and growth play must cite existing signal IDs. Do not invent URLs, quotes, companies, metrics, or sources. Return valid JSON only.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            query: input.query,
+            constraints: [
+              "Keep cluster ids from the provided clusters.",
+              "Keep growth play ids from the provided candidate plays.",
+              "Every cited signal id must exist in signals.",
+              "Do not remove score objects if present.",
+              "Prefer concrete actions over generic strategy language.",
+            ],
+            requiredShape: {
+              clusters:
+                "PainCluster[] with id,title,summary,frequency,urgency,representativeQuotes,relatedTools,signalIds,sourceDiversity,averagePainIntensity,averageHyperbrowserFit,clusterStrength,confidence",
+              growthPlays:
+                "GrowthPlay[] with id,channel,title,insight,recommendedAction,copyDraft,supportingSignalIds,score",
+              outboundDrafts: "string[]",
+              contentAngles: "string[]",
+            },
+            signals: input.signals,
+            signalScores: input.signalScores,
+            clusters: input.clusters,
+            candidatePlays: input.candidatePlays,
+          }),
+        },
+      ],
+    })
+  );
 
   const raw = response.choices[0]?.message.content;
   if (!raw) throw new Error("OpenAI returned an empty response.");

@@ -4,7 +4,7 @@ export type Urgency = "low" | "medium" | "high";
 
 export type ConfidenceLevel = "low" | "medium" | "high";
 
-export type AnalysisMode = "deterministic" | "lean" | "balanced" | "full";
+export type AnalysisMode = "deterministic" | "full";
 
 export type EffectiveAnalysisMode =
   | "demo"
@@ -181,6 +181,23 @@ export type HyperbrowserRunTrace = {
   fetchedPageCount: number;
   acceptedEvidenceCount: number;
   rejectedCandidateCount: number;
+};
+
+export type ResearchFeedbackTrace = {
+  summary: string[];
+  rejectedPages: Array<{
+    candidateId: string;
+    source: SignalSource;
+    title: string;
+    url: string;
+    originalSearchQuery?: string;
+    rejectionReason: string;
+    pageType?: string;
+    confidence: number;
+    reasoning: string[];
+    followUpSearches: string[];
+  }>;
+  suggestedSearches: string[];
 };
 
 export type RawSignal = {
@@ -415,6 +432,7 @@ export type MineMetadata = {
   searchDiagnostics?: SearchDiagnostic[];
   sourceDebug?: SourceDebugSummary[];
   hyperbrowserRun?: HyperbrowserRunTrace;
+  researchFeedback?: ResearchFeedbackTrace[];
   timings?: PhaseTiming[];
   llm: LLMUsageMetadata;
 };

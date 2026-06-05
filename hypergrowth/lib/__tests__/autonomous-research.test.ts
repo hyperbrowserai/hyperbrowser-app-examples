@@ -303,6 +303,65 @@ describe("autonomous research", () => {
       decision: "reject",
       artifactSignals: ["markdown"],
     });
+    expect(run.diagnostics.feedback[0]).toMatchObject({
+      rejectedPages: [
+        {
+          rejectionReason: "Rejected by page triage.",
+          originalSearchQuery: "playwright captcha workaround",
+          followUpSearches: ["playwright captcha github issue"],
+        },
+      ],
+      suggestedSearches: ["playwright captcha github issue"],
+    });
+  });
+
+  it("does not create routing feedback for accepted page triage decisions", async () => {
+    const run = await runAutonomousResearch({
+      client: {} as never,
+      query: "playwright captcha",
+      sources: ["hyperbrowser"],
+      openWebTargets,
+      maxResults: 3,
+      allowLLM: true,
+      llmCallBudget: 1,
+      searchAdapter: async ({ source, query }) => [
+        candidate({
+          id: `${source}-${query}`,
+          source,
+          title: "Playwright captcha fails in production",
+          snippet:
+            "Developers complain that Playwright captcha automation fails in production.",
+          canonicalUrl: "https://example.com/playwright-captcha",
+          evidenceKind: "article",
+        }),
+      ],
+      fetchAdapter: async (candidate) => ({
+        candidateId: candidate.id,
+        url: candidate.canonicalUrl ?? candidate.sourceUrl,
+        markdown:
+          "Playwright captcha automation fails in production and the workaround is flaky.",
+        links: [],
+        status: "success",
+      }),
+      pageTriageAdapter: async ({ fetchedDocuments }) => ({
+        decisions: fetchedDocuments.map((document) => ({
+          candidateId: document.candidateId,
+          decision: "accept",
+          evidenceQuote:
+            "Playwright captcha automation fails in production and the workaround is flaky.",
+          hyperbrowserFit: 0.9,
+          confidence: 0.9,
+          reasoning: ["Concrete browser automation failure."],
+          followUpSearches: [],
+          artifactSignals: ["markdown"],
+        })),
+        mode: "used",
+        callsAttempted: 1,
+      }),
+      budget: { maxFetchesPerRun: 1, maxQueriesPerWave: 1, maxWaves: 1 },
+    });
+
+    expect(run.diagnostics.feedback).toEqual([]);
   });
 
   it("preserves selected HN and GitHub coverage even when the wave query budget is tight", async () => {

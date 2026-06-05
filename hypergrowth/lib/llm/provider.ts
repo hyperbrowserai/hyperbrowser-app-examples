@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import type { LLMProviderMetadata } from "../types";
 
 export type LLMClientConfig = {
@@ -59,6 +60,37 @@ export function getLLMTimeoutMs(): number {
   }
 
   return 12_000;
+}
+
+export function isReasoningEnabled(): boolean {
+  return ["true", "1", "yes", "on"].includes(
+    (process.env.ENABLE_REASONING ?? "").trim().toLowerCase()
+  );
+}
+
+export function getReasoningEffort(): "low" | "medium" | "high" {
+  const configured = (process.env.REASONING_LEVEL ?? "medium")
+    .trim()
+    .toLowerCase();
+
+  if (configured === "low" || configured === "medium" || configured === "high") {
+    return configured;
+  }
+
+  return "medium";
+}
+
+export function withReasoningEffort(
+  params: ChatCompletionCreateParamsNonStreaming
+): ChatCompletionCreateParamsNonStreaming {
+  if (!isReasoningEnabled()) {
+    return params;
+  }
+
+  return {
+    ...params,
+    reasoning_effort: getReasoningEffort(),
+  };
 }
 
 function buildProviderHeaders(provider?: string): Record<string, string> | undefined {

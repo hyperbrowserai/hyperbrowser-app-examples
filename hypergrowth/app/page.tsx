@@ -4,12 +4,10 @@ import type { ComponentType, FormEvent } from "react";
 import { useRef, useState } from "react";
 import {
   Bot,
-  Leaf,
   Loader2,
   Minus,
   Plus,
   Radar,
-  Scale,
   Search,
   ShieldCheck,
   Sparkles,
@@ -28,8 +26,6 @@ const analysisModes: Array<{
   icon: ComponentType<{ size?: number; className?: string }>;
 }> = [
   { id: "deterministic", label: "Deterministic", icon: ShieldCheck },
-  { id: "lean", label: "Lean", icon: Leaf },
-  { id: "balanced", label: "Balanced", icon: Scale },
   { id: "full", label: "Full", icon: Sparkles },
 ];
 
@@ -47,12 +43,12 @@ export default function Home() {
   ]);
   const [includeBroadWeb, setIncludeBroadWeb] = useState(true);
   const [redditTargets, setRedditTargets] = useState(defaultRedditTargets);
-  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("balanced");
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("full");
   const [maxResults, setMaxResults] = useState(6);
   const [result, setResult] = useState<MineResult>(() =>
     buildDemoResult(
       "Playwright Cloudflare browser automation fails in production",
-      "balanced"
+      "full"
     )
   );
   const [isLoading, setIsLoading] = useState(false);

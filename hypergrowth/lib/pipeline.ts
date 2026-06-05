@@ -2,7 +2,6 @@ import { buildGrowthBrief } from "./brief";
 import { clusterSignals } from "./clustering";
 import { dedupeSignals } from "./dedupe";
 import { buildGrowthPlays } from "./growth-plays";
-import { selectJudgmentBatch } from "./llm/batch-policy";
 import { judgeSignals } from "./llm/judgment";
 import { fuseLLMJudgments } from "./score-fusion";
 import { scoreSignals } from "./scoring";
@@ -21,15 +20,18 @@ export async function runSignalPipeline(
     effectiveAnalysisMode: AnalysisMode;
     allowJudgment: boolean;
     allowSynthesis: boolean;
+    maxLLMCalls: number;
     llm: LLMUsageMetadata;
   }
 ): Promise<MinePipelineResult> {
   const initialScores = scoreSignals(query, signals);
   const deduped = dedupeSignals(signals, initialScores);
   const dedupedScores = scoreSignals(query, deduped.signals);
-  const judgmentBatch = options.allowJudgment
-    ? selectJudgmentBatch(deduped.signals, dedupedScores)
-    : [];
+  const remainingCalls = Math.max(
+    0,
+    options.maxLLMCalls - options.llm.callsAttempted
+  );
+  const judgmentBatch = options.allowJudgment ? deduped.signals : [];
   const judgment = options.allowJudgment
     ? await judgeSignals({
         query,
@@ -37,6 +39,7 @@ export async function runSignalPipeline(
         signalScores: dedupedScores.filter((score) =>
           judgmentBatch.some((signal) => signal.id === score.signalId)
         ),
+        maxCalls: remainingCalls,
       })
     : {
         judgments: [],
@@ -47,16 +50,23 @@ export async function runSignalPipeline(
     signals: deduped.signals,
     scores: dedupedScores,
     judgments: judgment.judgments,
+    fallbackReason:
+      options.allowJudgment && judgment.judgments.length < deduped.signals.length
+        ? judgment.failureReason ?? "LLM judgment did not return every signal."
+        : undefined,
   });
   const clusters = clusterSignals(fused.signals, fused.scores);
   const candidatePlays = buildGrowthPlays(clusters, fused.signals, fused.scores);
+  const allowSynthesis =
+    options.allowSynthesis &&
+    options.llm.callsAttempted + judgment.callsAttempted < options.maxLLMCalls;
   const synthesis = await synthesizeSignals({
     query,
     signals: fused.signals,
     signalScores: fused.scores,
     clusters,
     candidatePlays,
-  }, { allowLLM: options.allowSynthesis });
+  }, { allowLLM: allowSynthesis });
   const growthPlays = synthesis.growthPlays.length
     ? synthesis.growthPlays
     : candidatePlays;

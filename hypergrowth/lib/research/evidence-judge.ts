@@ -2,7 +2,7 @@ import { z } from "zod";
 import { deterministicExtract } from "../deterministic-extraction";
 import { applyEvidenceQualityGate, isNoiseEvidence } from "../evidence-quality";
 import { extractJsonObject } from "../json-utils";
-import { getLLMClient } from "../llm/provider";
+import { getLLMClient, withReasoningEffort } from "../llm/provider";
 import { truncateRunEventText } from "../run-events";
 import { painTerms, toolTerms } from "../taxonomy";
 import { matchedTerms, unique } from "../text";
@@ -26,13 +26,13 @@ export async function judgeEvidence({
   candidates,
   pageTriageDecisions = [],
   maxResults,
-  allowLLM,
+  remainingLLMCalls,
 }: {
   query: string;
   candidates: EvidenceCandidate[];
   pageTriageDecisions?: PageTriageDecision[];
   maxResults: number;
-  allowLLM: boolean;
+  remainingLLMCalls: number;
 }): Promise<{
   rawSignals: RawSignal[];
   qualityAccepted: EvidenceCandidate[];
@@ -78,7 +78,7 @@ export async function judgeEvidence({
   const rejectedIds = new Set([
     ...noiseRejected.map((candidate) => candidate.id),
     ...pageTriageRejected.map((candidate) => candidate.id),
-    ...(!allowLLM ? promotionalFlagged.map((candidate) => candidate.id) : []),
+    ...(!remainingLLMCalls ? promotionalFlagged.map((candidate) => candidate.id) : []),
   ]);
   const flaggedById = new Map(
     promotionalFlagged.map((candidate) => [candidate.id, candidate])
@@ -90,10 +90,10 @@ export async function judgeEvidence({
     ...postFetchQuality.rejected,
     ...noiseRejected,
     ...pageTriageRejected,
-    ...(!allowLLM ? promotionalFlagged : []),
+    ...(!remainingLLMCalls ? promotionalFlagged : []),
   ];
 
-  if (!allowLLM) {
+  if (remainingLLMCalls <= 0) {
     return deterministicJudgment({
       query,
       qualityAccepted,
@@ -119,95 +119,110 @@ export async function judgeEvidence({
     });
   }
 
-  try {
-    const response = await llm.client.chat.completions.create({
-      model: llm.metadata.model ?? "gpt-4.1-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are HyperGrowth's evidence judge. Accept only grounded developer-authored pain or workaround evidence. Return strict JSON only.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: "Judge whether each candidate contains actionable developer-pain evidence.",
-            query,
-            candidates: qualityAccepted.map((candidate) => ({
-              id: candidate.id,
-              source: candidate.source,
-              url: candidate.canonicalUrl,
-              title: candidate.title,
-              text: truncateRunEventText(candidateText(candidate), 1400),
-              evidenceKind: candidate.evidenceKind,
-              qualityFlags: candidate.qualityFlags,
-            })),
-            acceptOnlyIf: [
-              "The text contains a concrete developer-authored complaint, failure, workaround, migration issue, tool limitation, production incident, or buying/infra pain.",
-              "The quote is copied from the supplied text and can stand alone as evidence.",
-              "The evidence maps to browser automation, scraping, anti-bot, session, proxy, extraction, or developer workflow friction.",
-            ],
-            rejectIf: [
-              "The page is a login wall, block wall, network security message, cookie banner, search result UI, home page, navigation chrome, or generic marketing copy.",
-              "The text is a job ad, hiring pitch, product launch, vendor self-promotion, sponsorship, or company capability description rather than user pain.",
-              "The text merely says Reddit/GitHub/HN blocked access.",
-              "The text is a general article with no concrete developer pain or workaround.",
-              "The quote is inferred rather than present in the supplied text.",
-            ],
-            maxAccepted: maxResults,
-            outputShape: {
-              judgments: [
-                {
-                  candidateId: "string",
-                  accepted: true,
-                  quote: "verbatim quote from supplied text",
-                  title: "short evidence title",
-                  rationale: "why accepted or rejected",
-                },
-              ],
+  let attempts = 0;
+  let lastError: unknown;
+  const maxAttempts = Math.min(3, remainingLLMCalls);
+
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      const previousFailure = attempts > 1 ? String(lastError) : undefined;
+      const response = await llm.client.chat.completions.create(
+        withReasoningEffort({
+          model: llm.metadata.model ?? "gpt-4.1-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are HyperGrowth's evidence judge. Accept only grounded developer-authored pain or workaround evidence. Return strict JSON only.",
             },
-          }),
-        },
-      ],
-    });
-    const content = response.choices[0]?.message.content;
-    if (!content) throw new Error("LLM returned empty evidence judgment.");
+            {
+              role: "user",
+              content: JSON.stringify({
+                task: previousFailure
+                  ? "Repair the previous evidence-judgment failure and return valid JSON."
+                  : "Judge whether each candidate contains actionable developer-pain evidence.",
+                previousFailure,
+                query,
+                candidates: qualityAccepted.map((candidate) => ({
+                  id: candidate.id,
+                  source: candidate.source,
+                  url: candidate.canonicalUrl,
+                  title: candidate.title,
+                  text: truncateRunEventText(candidateText(candidate), 1400),
+                  evidenceKind: candidate.evidenceKind,
+                  qualityFlags: candidate.qualityFlags,
+                })),
+                acceptOnlyIf: [
+                  "The text contains a concrete developer-authored complaint, failure, workaround, migration issue, tool limitation, production incident, or buying/infra pain.",
+                  "The quote is copied from the supplied text and can stand alone as evidence.",
+                  "The evidence maps to browser automation, scraping, anti-bot, session, proxy, extraction, or developer workflow friction.",
+                ],
+                rejectIf: [
+                  "The page is a login wall, block wall, network security message, cookie banner, search result UI, home page, navigation chrome, or generic marketing copy.",
+                  "The text is a job ad, hiring pitch, product launch, vendor self-promotion, sponsorship, or company capability description rather than user pain.",
+                  "The text merely says Reddit/GitHub/HN blocked access.",
+                  "The text is a general article with no concrete developer pain or workaround.",
+                  "The quote is inferred rather than present in the supplied text.",
+                ],
+                maxAccepted: maxResults,
+                outputShape: {
+                  judgments: [
+                    {
+                      candidateId: "string",
+                      accepted: true,
+                      quote: "verbatim quote from supplied text",
+                      title: "short evidence title",
+                      rationale: "why accepted or rejected",
+                    },
+                  ],
+                },
+              }),
+            },
+          ],
+        })
+      );
+      const content = response.choices[0]?.message.content;
+      if (!content) throw new Error("LLM returned empty evidence judgment.");
 
-    const parsed = parseEvidenceJudgmentContent(content);
-    const judgments = sanitizeJudgments(parsed.judgments, qualityAccepted);
-    const rawSignals = judgmentsToRawSignals({
-      judgments,
-      candidates: qualityAccepted,
-      maxResults,
-    });
-    const withPageTriageSignals = supplementPageTriageEvidence({
-      rawSignals,
-      candidates: qualityAccepted,
-      pageTriageDecisions,
-      maxResults,
-    });
+      const parsed = parseEvidenceJudgmentContent(content);
+      const judgments = sanitizeJudgments(parsed.judgments, qualityAccepted);
+      const rawSignals = judgmentsToRawSignals({
+        judgments,
+        candidates: qualityAccepted,
+        maxResults,
+      });
+      const withPageTriageSignals = supplementPageTriageEvidence({
+        rawSignals,
+        candidates: qualityAccepted,
+        pageTriageDecisions,
+        maxResults,
+      });
 
-    return {
-      rawSignals: withPageTriageSignals,
-      qualityAccepted,
-      qualityRejected,
-      judgments,
-      mode: rawSignals.length === withPageTriageSignals.length ? "used" : "partial",
-      callsAttempted: 1,
-    };
-  } catch (error) {
-    return deterministicJudgment({
-      query,
-      qualityAccepted,
-      qualityRejected,
-      pageTriageDecisions,
-      maxResults,
-      mode: "fallback",
-      callsAttempted: 1,
-      failureReason: `Evidence judgment failed: ${error}`,
-    });
+      return {
+        rawSignals: withPageTriageSignals,
+        qualityAccepted,
+        qualityRejected,
+        judgments,
+        mode: rawSignals.length === withPageTriageSignals.length ? "used" : "partial",
+        callsAttempted: attempts,
+      };
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  return deterministicJudgment({
+    query,
+    qualityAccepted,
+    qualityRejected,
+    pageTriageDecisions,
+    maxResults,
+    mode: "fallback",
+    callsAttempted: attempts,
+    failureReason: `Evidence judgment failed after ${attempts} attempts: ${lastError}`,
+  });
 }
 
 export function parseEvidenceJudgmentContent(

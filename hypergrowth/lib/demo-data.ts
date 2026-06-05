@@ -122,7 +122,7 @@ const demoSignalScores: SignalScore[] = [
 
 export function buildDemoResult(
   query = "browser automation pain",
-  requestedAnalysisMode: AnalysisMode = "balanced",
+  requestedAnalysisMode: AnalysisMode = "full",
   mode?: AnalysisModeResolution
 ): MineResult {
   const generatedAt = new Date().toISOString();

@@ -15,14 +15,18 @@ export function fuseLLMJudgments({
   signals,
   scores,
   judgments,
+  fallbackReason,
 }: {
   signals: PainSignal[];
   scores: SignalScore[];
   judgments: LLMJudgment[];
+  fallbackReason?: string;
 }): { signals: PainSignal[]; scores: SignalScore[] } {
-  if (judgments.length === 0) return { signals, scores };
+  if (judgments.length === 0 && !fallbackReason) return { signals, scores };
 
-  const judgmentById = new Map(judgments.map((judgment) => [judgment.signalId, judgment]));
+  const judgmentById = new Map(
+    judgments.map((judgment) => [judgment.signalId, judgment])
+  );
   const fusedSignals = signals.map((signal) => {
     const judgment = judgmentById.get(signal.id);
     if (!judgment) return signal;
@@ -35,16 +39,23 @@ export function fuseLLMJudgments({
   });
   const fusedScores = scores.map((score) => {
     const judgment = judgmentById.get(score.signalId);
-    if (!judgment) return score;
+    if (!judgment) {
+      return fallbackReason
+        ? {
+            ...score,
+            reasons: [
+              ...score.reasons,
+              `LLM: deterministic fallback (${fallbackReason})`,
+            ],
+          }
+        : score;
+    }
 
-    const relevance = Math.max(score.relevance, 0.9 * judgment.contextualRelevance);
-    const painIntensity =
-      0.45 * score.painIntensity + 0.55 * judgment.impliedPainIntensity;
-    const commercialIntent =
-      0.35 * score.commercialIntent + 0.65 * judgment.impliedCommercialIntent;
-    const hyperbrowserFit =
-      0.45 * score.hyperbrowserFit + 0.55 * judgment.hyperbrowserFit;
-    const confidence = 0.6 * score.confidence + 0.4 * judgment.confidence;
+    const relevance = judgment.contextualRelevance;
+    const painIntensity = judgment.impliedPainIntensity;
+    const commercialIntent = judgment.impliedCommercialIntent;
+    const hyperbrowserFit = judgment.hyperbrowserFit;
+    const confidence = judgment.confidence;
     let total =
       weights.relevance * relevance +
       weights.painIntensity * painIntensity +
@@ -67,7 +78,7 @@ export function fuseLLMJudgments({
       confidence: roundScore(clamp01(confidence)),
       total: roundScore(clamp01(total)),
       reasons: [
-        ...score.reasons,
+        "LLM: judged final score",
         ...judgment.reasoning.map((reason) => `LLM: ${reason}`),
         ...(judgment.isActionable ? [] : ["LLM: marked as not actionable"]),
       ],

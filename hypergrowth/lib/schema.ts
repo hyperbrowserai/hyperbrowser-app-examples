@@ -5,12 +5,7 @@ export const signalSourceSchema = z.enum([
   "github",
   "hyperbrowser",
 ]);
-export const analysisModeSchema = z.enum([
-  "deterministic",
-  "lean",
-  "balanced",
-  "full",
-]);
+export const analysisModeSchema = z.enum(["deterministic", "full"]);
 
 export const defaultRedditSubreddits = [
   "webscraping",
@@ -58,6 +53,6 @@ export const mineRequestSchema = z.object({
     .min(1, "Select at least one source.")
     .default(["hackernews", "github", "hyperbrowser"]),
   maxResults: z.coerce.number().int().min(3).max(30).default(12),
-  analysisMode: analysisModeSchema.default("balanced"),
+  analysisMode: analysisModeSchema.default("full"),
   openWebTargets: openWebTargetsSchema,
 });

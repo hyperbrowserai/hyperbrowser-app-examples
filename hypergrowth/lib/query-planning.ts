@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { extractJsonObject } from "./json-utils";
 import { isLLMTransportError } from "./llm/errors";
-import { getLLMClient } from "./llm/provider";
+import { getLLMClient, withReasoningEffort } from "./llm/provider";
 import {
   hyperbrowserFitTerms,
   painTerms,
@@ -194,57 +194,59 @@ function requestQueryPlan({
   if (!llm) throw new Error("No LLM provider configured.");
 
   return llm.client.chat.completions
-    .create({
-      model: llm.metadata.model ?? "gpt-4.1-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You create source-aware search queries for HyperGrowth, a Hyperbrowser-specific developer GTM signal miner. Return strict JSON only.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: repairInput
-              ? "Repair the previous query plan failure and return valid JSON."
-              : "Generate a source-aware query plan.",
-            previousFailure: repairInput,
-            originalQuery: query,
-            selectedSources,
-            openWebTargets,
-            constraints: [
-              "GitHub queries should use issue/failure language.",
-              "Hacker News queries should use market/category language.",
-              "Reddit queries should use frustration/workaround language.",
-              "Hyperbrowser queries should include broad open-web discovery when includeBroadWeb is true.",
-              "Hyperbrowser queries should include site:reddit.com/r/{subreddit} searches for the supplied redditSubreddits when relevant.",
-              "Return at most 3 queries per source.",
-              "Queries must be 80 characters or fewer.",
-              "Avoid vague phrases like developer pain points.",
-              "Prefer phrases developers would actually write publicly.",
-            ],
-            shape: {
+    .create(
+      withReasoningEffort({
+        model: llm.metadata.model ?? "gpt-4.1-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You create source-aware search queries for HyperGrowth, a Hyperbrowser-specific developer GTM signal miner. Return strict JSON only.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              task: repairInput
+                ? "Repair the previous query plan failure and return valid JSON."
+                : "Generate a source-aware query plan.",
+              previousFailure: repairInput,
               originalQuery: query,
-              strategy: "llm-source-routed",
-              sourceQueries: {
-                github: ["string"],
-                hackernews: ["string"],
-                reddit: ["string"],
-                hyperbrowser: ["string"],
+              selectedSources,
+              openWebTargets,
+              constraints: [
+                "GitHub queries should use issue/failure language.",
+                "Hacker News queries should use market/category language.",
+                "Reddit queries should use frustration/workaround language.",
+                "Hyperbrowser queries should include broad open-web discovery when includeBroadWeb is true.",
+                "Hyperbrowser queries should include site:reddit.com/r/{subreddit} searches for the supplied redditSubreddits when relevant.",
+                "Return at most 3 queries per source.",
+                "Queries must be 80 characters or fewer.",
+                "Avoid vague phrases like developer pain points.",
+                "Prefer phrases developers would actually write publicly.",
+              ],
+              shape: {
+                originalQuery: query,
+                strategy: "llm-source-routed",
+                sourceQueries: {
+                  github: ["string"],
+                  hackernews: ["string"],
+                  reddit: ["string"],
+                  hyperbrowser: ["string"],
+                },
+                sourceWeights: {
+                  github: 0.9,
+                  hackernews: 0.5,
+                  reddit: 0.7,
+                  hyperbrowser: 0.8,
+                },
+                rationale: ["string"],
               },
-              sourceWeights: {
-                github: 0.9,
-                hackernews: 0.5,
-                reddit: 0.7,
-                hyperbrowser: 0.8,
-              },
-              rationale: ["string"],
-            },
-          }),
-        },
-      ],
-    })
+            }),
+          },
+        ],
+      })
+    )
     .then((response) => {
       const content = response.choices[0]?.message.content;
       if (!content) throw new Error("LLM returned empty query plan.");

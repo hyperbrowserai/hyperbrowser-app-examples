@@ -2,39 +2,42 @@ import { describe, expect, it } from "vitest";
 import { mineRequestSchema } from "../schema";
 
 describe("mineRequestSchema", () => {
-  it("defaults to GitHub, Hacker News, and Hyperbrowser", () => {
+  it("defaults omitted analysis mode to full", () => {
     const parsed = mineRequestSchema.parse({
-      query: "playwright cloudflare",
+      query: "Playwright captcha failures",
+      sources: ["github"],
       maxResults: 6,
     });
 
-    expect(parsed.sources).toEqual(["hackernews", "github", "hyperbrowser"]);
+    expect(parsed.analysisMode).toBe("full");
   });
 
-  it("rejects direct Reddit as a source", () => {
-    const parsed = mineRequestSchema.safeParse({
-      query: "playwright cloudflare",
-      sources: ["reddit"],
-      maxResults: 6,
-    });
+  it("accepts only deterministic and full analysis modes", () => {
+    expect(
+      mineRequestSchema.parse({
+        query: "Playwright captcha failures",
+        sources: ["github"],
+        maxResults: 6,
+        analysisMode: "deterministic",
+      }).analysisMode
+    ).toBe("deterministic");
 
-    expect(parsed.success).toBe(false);
-  });
+    expect(
+      mineRequestSchema.safeParse({
+        query: "Playwright captcha failures",
+        sources: ["github"],
+        maxResults: 6,
+        analysisMode: "lean",
+      }).success
+    ).toBe(false);
 
-  it("sanitizes subreddit targets", () => {
-    const parsed = mineRequestSchema.parse({
-      query: "playwright cloudflare",
-      sources: ["hyperbrowser"],
-      maxResults: 6,
-      openWebTargets: {
-        includeBroadWeb: true,
-        redditSubreddits: ["r/webscraping", "playwright", "webscraping"],
-      },
-    });
-
-    expect(parsed.openWebTargets.redditSubreddits).toEqual([
-      "webscraping",
-      "playwright",
-    ]);
+    expect(
+      mineRequestSchema.safeParse({
+        query: "Playwright captcha failures",
+        sources: ["github"],
+        maxResults: 6,
+        analysisMode: "balanced",
+      }).success
+    ).toBe(false);
   });
 });

@@ -938,6 +938,7 @@ function formatCandidateCounts(search: {
 
 function BrowserEvidence({ result }: { result: MineResult }) {
   const run = result.metadata.hyperbrowserRun;
+  const feedback = result.metadata.researchFeedback ?? [];
 
   if (!run || (!run.searches.length && !run.fetches.length)) {
     return null;
@@ -973,6 +974,63 @@ function BrowserEvidence({ result }: { result: MineResult }) {
               tone="warning"
             />
           </div>
+
+          {feedback.length ? (
+            <div className="rounded-md border border-accent-orange/25 bg-accent-orange/8 px-3 py-3">
+              <div className="mb-2 flex items-center justify-between gap-2 text-xs font-black uppercase tracking-wide text-accent-orange">
+                <span className="flex items-center gap-1.5">
+                  <Route size={12} />
+                  Routing Feedback
+                </span>
+                <span className="font-mono text-accent-orange/80">
+                  {feedback.length} wave{feedback.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="max-h-[13rem] space-y-2 overflow-y-auto pr-1 text-xs">
+                {feedback.slice(-2).map((packet, index) => (
+                  <div
+                    key={`feedback-${index}-${packet.summary.join("|")}`}
+                    className="rounded border border-accent-orange/20 bg-black/20 px-2.5 py-2"
+                  >
+                    {packet.summary.length ? (
+                      <div className="space-y-1 leading-5 text-foreground/85">
+                        {packet.summary.slice(0, 3).map((item) => (
+                          <p key={item}>{item}</p>
+                        ))}
+                      </div>
+                    ) : null}
+                    {packet.rejectedPages.slice(0, 2).map((page) => (
+                      <div key={page.candidateId} className="mt-2 border-t border-line/30 pt-2">
+                        <p className="line-clamp-1 font-bold text-foreground">
+                          {page.title}
+                        </p>
+                        {page.originalSearchQuery ? (
+                          <p className="mt-0.5 line-clamp-1 font-mono text-muted">
+                            query: {page.originalSearchQuery}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 line-clamp-2 leading-5 text-accent-orange">
+                          {page.rejectionReason}
+                        </p>
+                      </div>
+                    ))}
+                    {packet.suggestedSearches.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {packet.suggestedSearches.slice(0, 3).map((search) => (
+                          <span
+                            key={search}
+                            className="max-w-full truncate rounded-full border border-accent-orange/25 bg-black/25 px-2 py-0.5 text-accent-orange"
+                          >
+                            {search}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="rounded-md border border-line/50 bg-black/20 px-3 py-3">
             <div className="mb-2 flex items-center justify-between gap-2 text-xs font-black uppercase tracking-wide text-muted">
@@ -1367,16 +1425,22 @@ function EvidenceTable({
               </tr>
             </thead>
             <tbody>
-              {signals.map((signal) => {
-                const score = scoreMap.get(signal.id);
-                return (
-                  <EvidenceRow
-                    key={signal.id}
-                    signal={signal}
-                    score={score}
-                  />
-                );
-              })}
+              {[...signals]
+                .sort((a, b) => {
+                  const scoreA = scoreMap.get(a.id)?.total ?? 0;
+                  const scoreB = scoreMap.get(b.id)?.total ?? 0;
+                  return scoreB - scoreA;
+                })
+                .map((signal) => {
+                  const score = scoreMap.get(signal.id);
+                  return (
+                    <EvidenceRow
+                      key={signal.id}
+                      signal={signal}
+                      score={score}
+                    />
+                  );
+                })}
             </tbody>
           </table>
         </div>
@@ -1484,7 +1548,7 @@ function EvidenceRow({
       <td className="max-w-[360px] py-4 pl-3 pr-4 align-top">
         <div className="space-y-2">
           {score?.reasons.length ? (
-            <p className="line-clamp-3 text-sm leading-5 text-muted">
+            <p className="text-sm leading-5 text-muted">
               {score.reasons.join(". ")}
             </p>
           ) : null}

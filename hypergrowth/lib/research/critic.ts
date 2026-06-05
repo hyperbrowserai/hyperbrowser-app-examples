@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractJsonObject } from "../json-utils";
-import { getLLMClient } from "../llm/provider";
+import { getLLMClient, withReasoningEffort } from "../llm/provider";
 import { truncateRunEventText } from "../run-events";
 import type { EvidenceCandidate } from "../types";
 import type { FetchTarget } from "./types";
@@ -22,12 +22,14 @@ export async function selectFetchTargets({
   query,
   candidates,
   maxTargets,
-  allowLLM,
+  minTargets,
+  remainingLLMCalls,
 }: {
   query: string;
   candidates: EvidenceCandidate[];
   maxTargets: number;
-  allowLLM: boolean;
+  minTargets: number;
+  remainingLLMCalls: number;
 }): Promise<{
   targets: FetchTarget[];
   mode: "disabled" | "used" | "fallback" | "deterministic";
@@ -40,12 +42,12 @@ export async function selectFetchTargets({
   if (fetchable.length === 0 || maxTargets <= 0) {
     return {
       targets: [],
-      mode: allowLLM ? "used" : "disabled",
+      mode: "disabled",
       callsAttempted: 0,
     };
   }
 
-  if (!allowLLM) {
+  if (remainingLLMCalls <= 0) {
     return {
       targets: deterministicTargets(fetchable, maxTargets),
       mode: "deterministic",
@@ -63,69 +65,85 @@ export async function selectFetchTargets({
     };
   }
 
-  try {
-    const response = await llm.client.chat.completions.create({
-      model: llm.metadata.model ?? "gpt-4.1-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You choose which search results are worth fetching for grounded developer-pain evidence. Return strict JSON only.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: "Select fetch targets. Be conservative.",
-            query,
-            candidates: fetchable.map((candidate) => ({
-              id: candidate.id,
-              source: candidate.source,
-              url: candidate.canonicalUrl,
-              title: candidate.title,
-              snippet: truncateRunEventText(candidate.snippet, 360),
-              evidenceKind: candidate.evidenceKind,
-            })),
-            acceptCriteria: [
-              "Fetch pages likely to contain a developer-authored complaint, workaround, incident, bug, issue, or thread.",
-              "Prefer forum, GitHub, HN, Reddit comment/post, docs issue, or concrete troubleshooting pages.",
-            ],
-            rejectCriteria: [
-              "Do not fetch login pages, search pages, home pages, category pages, SEO listicles, cookie notices, or block-wall results.",
-              "Do not fetch a Reddit subreddit root or Reddit search page.",
-            ],
-            maxTargets,
-            outputShape: {
-              fetchTargets: [{ candidateId: "string", reason: "string" }],
-              skipCandidateIds: ["string"],
-              stopReason: "string",
+  let attempts = 0;
+  let lastError: unknown;
+  const maxAttempts = Math.min(3, remainingLLMCalls);
+
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      const previousFailure = attempts > 1 ? String(lastError) : undefined;
+      const response = await llm.client.chat.completions.create(
+        withReasoningEffort({
+          model: llm.metadata.model ?? "gpt-4.1-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "You choose which search results are worth fetching for grounded developer-pain evidence. Return strict JSON only.",
             },
-          }),
-        },
-      ],
-    });
-    const content = response.choices[0]?.message.content;
-    if (!content) throw new Error("LLM returned empty fetch-target selection.");
+            {
+              role: "user",
+              content: JSON.stringify({
+                task: previousFailure
+                  ? `Repair the previous fetch-target selection failure and return valid JSON. Select between ${minTargets} and ${maxTargets} fetch targets.`
+                  : `Select between ${minTargets} and ${maxTargets} fetch targets. You MUST select at least ${minTargets} targets if enough valid candidates exist. Do not be overly conservative.`,
+                previousFailure,
+                query,
+                candidates: fetchable.map((candidate) => ({
+                  id: candidate.id,
+                  source: candidate.source,
+                  url: candidate.canonicalUrl,
+                  title: candidate.title,
+                  snippet: truncateRunEventText(candidate.snippet, 360),
+                  evidenceKind: candidate.evidenceKind,
+                })),
+                acceptCriteria: [
+                  "Fetch pages likely to contain a developer-authored complaint, workaround, incident, bug, issue, or thread.",
+                  "Prefer forum, GitHub, HN, Reddit comment/post, docs issue, or concrete troubleshooting pages.",
+                ],
+                rejectCriteria: [
+                  "Do not fetch login pages, search pages, home pages, category pages, SEO listicles, cookie notices, or block-wall results.",
+                  "Do not fetch a Reddit subreddit root or Reddit search page.",
+                ],
+                minTargets,
+                maxTargets,
+                outputShape: {
+                  fetchTargets: [{ candidateId: "string", reason: "string" }],
+                  skipCandidateIds: ["string"],
+                  stopReason: "string",
+                },
+              }),
+            },
+          ],
+        })
+      );
+      const content = response.choices[0]?.message.content;
+      if (!content) throw new Error("LLM returned empty fetch-target selection.");
 
-    const parsed = criticSchema.parse(extractJsonObject(content));
-    const ids = new Set(fetchable.map((candidate) => candidate.id));
-    const targets = parsed.fetchTargets
-      .filter((target) => ids.has(target.candidateId))
-      .slice(0, maxTargets);
+      const parsed = criticSchema.parse(extractJsonObject(content));
+      const ids = new Set(fetchable.map((candidate) => candidate.id));
+      const targets = parsed.fetchTargets
+        .filter((target) => ids.has(target.candidateId))
+        .slice(0, maxTargets);
 
-    return {
-      targets: targets.length ? targets : deterministicTargets(fetchable, maxTargets),
-      mode: "used",
-      callsAttempted: 1,
-    };
-  } catch (error) {
-    return {
-      targets: deterministicTargets(fetchable, maxTargets),
-      mode: "fallback",
-      callsAttempted: 1,
-      failureReason: `Search-result criticism failed: ${error}`,
-    };
+      return {
+        targets: targets.length ? targets : deterministicTargets(fetchable, maxTargets),
+        mode: "used",
+        callsAttempted: attempts,
+      };
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  return {
+    targets: deterministicTargets(fetchable, maxTargets),
+    mode: "fallback",
+    callsAttempted: attempts,
+    failureReason: `Fetch-target selection failed after ${attempts} attempts: ${lastError}`,
+  };
 }
 
 function deterministicTargets(

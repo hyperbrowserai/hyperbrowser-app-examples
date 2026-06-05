@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { extractJsonObject } from "../json-utils";
 import { isLLMTransportError } from "./errors";
-import { getLLMClient } from "./provider";
+import { getLLMClient, withReasoningEffort } from "./provider";
 import type { EvidenceCandidate } from "../types";
 
 const triageSchema = z.object({
@@ -75,46 +75,48 @@ async function requestCandidateTriage(
   const llm = getLLMClient();
   if (!llm) throw new Error("No LLM provider configured.");
 
-  const response = await llm.client.chat.completions.create({
-    model: llm.metadata.model ?? "gpt-4.1-mini",
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You triage public developer evidence candidates for HyperGrowth. Select only candidates worth fetching or extracting. Return strict JSON only.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          task: repairInput
-            ? "Repair the previous triage failure and return valid JSON."
-            : "Select evidence candidates that look like real developer pain.",
-          previousFailure: repairInput,
-          query,
-          constraints: [
-            "Reject login pages, block pages, no-result messages, nav chrome, and generic docs.",
-            "Prefer developer-authored issues, posts, comments, forum threads, or concrete workaround pages.",
-            "Do not select more than 16 candidates.",
-            "Only return candidate IDs that were provided.",
-          ],
-          candidates: candidates.map((candidate) => ({
-            id: candidate.id,
-            source: candidate.source,
-            title: candidate.title,
-            snippet: candidate.snippet,
-            evidenceKind: candidate.evidenceKind,
-            url: candidate.canonicalUrl ?? candidate.sourceUrl,
-          })),
-          shape: {
-            selectedCandidateIds: ["string"],
-            rejectedCandidateIds: ["string"],
-            rationale: ["string"],
-          },
-        }),
-      },
-    ],
-  });
+  const response = await llm.client.chat.completions.create(
+    withReasoningEffort({
+      model: llm.metadata.model ?? "gpt-4.1-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You triage public developer evidence candidates for HyperGrowth. Select only candidates worth fetching or extracting. Return strict JSON only.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: repairInput
+              ? "Repair the previous triage failure and return valid JSON."
+              : "Select evidence candidates that look like real developer pain.",
+            previousFailure: repairInput,
+            query,
+            constraints: [
+              "Reject login pages, block pages, no-result messages, nav chrome, and generic docs.",
+              "Prefer developer-authored issues, posts, comments, forum threads, or concrete workaround pages.",
+              "Do not select more than 16 candidates.",
+              "Only return candidate IDs that were provided.",
+            ],
+            candidates: candidates.map((candidate) => ({
+              id: candidate.id,
+              source: candidate.source,
+              title: candidate.title,
+              snippet: candidate.snippet,
+              evidenceKind: candidate.evidenceKind,
+              url: candidate.canonicalUrl ?? candidate.sourceUrl,
+            })),
+            shape: {
+              selectedCandidateIds: ["string"],
+              rejectedCandidateIds: ["string"],
+              rationale: ["string"],
+            },
+          }),
+        },
+      ],
+    })
+  );
 
   const content = response.choices[0]?.message.content;
   if (!content) throw new Error("LLM returned empty candidate triage.");

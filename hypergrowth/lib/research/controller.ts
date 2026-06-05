@@ -22,6 +22,7 @@ import type {
   PageTriageAdapter,
   PageTriageDecision,
   ResearchBudget,
+  ResearchFeedback,
   ResearchSearch,
   ResearchResult,
   SearchAdapter,
@@ -82,6 +83,8 @@ export async function runAutonomousResearch({
   const fetchedDocuments: FetchedDocument[] = [];
   const pageTriageDecisions: ResearchResult["diagnostics"]["pageTriageDecisions"] =
     [];
+  const feedback: ResearchFeedback[] = [];
+  const candidateSearchContext = new Map<string, CandidateSearchContext>();
   const executedSearches: ExecutedSearch[] = [];
   let qualityAccepted: EvidenceCandidate[] = [];
   let qualityRejected: EvidenceCandidate[] = [];
@@ -92,7 +95,7 @@ export async function runAutonomousResearch({
     query,
     selectedSources: effectiveSources,
     openWebTargets,
-    allowLLM: llm.callsAttempted < llmCallBudget,
+    remainingLLMCalls: allowLLM ? Math.max(0, llmCallBudget - llm.callsAttempted) : 0,
   });
   llm.queryExpansionMode = planner.mode;
   llm.callsAttempted += planner.callsAttempted;
@@ -139,6 +142,12 @@ export async function runAutonomousResearch({
         errors,
         emit,
       });
+      recordCandidateSearchContext({
+        candidates: found.candidates,
+        search,
+        waveIndex: wave.index,
+        candidateSearchContext,
+      });
       appendUniqueCandidates(candidates, found.candidates);
       searchDiagnostics.push(found.diagnostic);
       executedSearches.push({
@@ -159,8 +168,9 @@ export async function runAutonomousResearch({
     const critic = await selectFetchTargets({
       query,
       candidates: initialQuality.accepted,
-      maxTargets: remainingFetches,
-      allowLLM: allowCriticLLM,
+      maxTargets: Math.min(remainingFetches, maxResults),
+      minTargets: Math.max(1, Math.floor(maxResults / 2)),
+      remainingLLMCalls: allowCriticLLM ? Math.max(0, llmCallBudget - llm.callsAttempted - reserveGapExpansionCall - reserveEvidenceCall) : 0,
     });
     llm.candidateTriageMode = combineMode(llm.candidateTriageMode, critic.mode);
     llm.callsAttempted += critic.callsAttempted;
@@ -205,7 +215,7 @@ export async function runAutonomousResearch({
       candidates,
       fetchedDocuments: fetchedThisWave,
       maxDecisions: Math.max(maxResults, fetchedThisWave.length),
-      allowLLM: allowPageTriageLLM,
+      remainingLLMCalls: allowPageTriageLLM ? Math.max(0, llmCallBudget - llm.callsAttempted) : 0,
     });
     llm.pageTriageMode = combineMode(llm.pageTriageMode, pageTriage.mode);
     llm.callsAttempted += pageTriage.callsAttempted;
@@ -215,6 +225,15 @@ export async function runAutonomousResearch({
     );
     pageTriageDecisions.push(...pageTriage.decisions);
     applyPageTriageToFetchedDocuments(fetchedDocuments, pageTriage.decisions);
+    const waveFeedback = buildResearchFeedback({
+      pageTriageDecisions: pageTriage.decisions,
+      fetchedDocuments: fetchedThisWave,
+      candidates,
+      candidateSearchContext,
+    });
+    if (waveFeedback) {
+      feedback.push(waveFeedback);
+    }
     await emit?.({
       type: "llm_step",
       step: "page_triage",
@@ -241,6 +260,12 @@ export async function runAutonomousResearch({
         errors,
         emit,
       });
+      recordCandidateSearchContext({
+        candidates: found.candidates,
+        search,
+        waveIndex: wave.index,
+        candidateSearchContext,
+      });
       appendUniqueCandidates(candidates, found.candidates);
       searchDiagnostics.push(found.diagnostic);
       executedSearches.push({
@@ -255,7 +280,7 @@ export async function runAutonomousResearch({
       candidates,
       pageTriageDecisions,
       maxResults,
-      allowLLM: llm.callsAttempted < llmCallBudget,
+      remainingLLMCalls: allowLLM ? Math.max(0, llmCallBudget - llm.callsAttempted) : 0,
     });
     llm.evidenceExtractionMode = combineMode(
       llm.evidenceExtractionMode,
@@ -309,7 +334,8 @@ export async function runAutonomousResearch({
         title: candidate.title,
         flags: candidate.qualityFlags,
       })),
-      allowLLM: llm.callsAttempted < llmCallBudget,
+      researchFeedback: feedback,
+      remainingLLMCalls: allowLLM ? Math.max(0, llmCallBudget - llm.callsAttempted) : 0,
     });
     llm.gapExpansionMode = combineMode(
       llm.gapExpansionMode,
@@ -325,8 +351,12 @@ export async function runAutonomousResearch({
       step: "gap_expansion",
       mode: gapExpansion.mode,
       summary: gapExpansion.searches.length
-        ? `Expanded into ${gapExpansion.searches.length} follow-up searches.`
-        : "No useful follow-up searches were added.",
+        ? `Expanded into ${gapExpansion.searches.length} follow-up searches${
+            feedback.length ? " using page-triage feedback" : ""
+          }.`
+        : `No useful follow-up searches were added${
+            feedback.length ? " after page-triage feedback" : ""
+          }.`,
     });
 
     if (gapExpansion.searches.length === 0) {
@@ -356,10 +386,196 @@ export async function runAutonomousResearch({
       searches: searchDiagnostics,
       fetchedDocuments,
       pageTriageDecisions,
+      feedback,
       judgments,
       stopReason,
     },
   };
+}
+
+type CandidateSearchContext = {
+  source: SignalSource;
+  query: string;
+  waveIndex: number;
+  rationale: string;
+};
+
+function recordCandidateSearchContext({
+  candidates,
+  search,
+  waveIndex,
+  candidateSearchContext,
+}: {
+  candidates: EvidenceCandidate[];
+  search: ResearchSearch;
+  waveIndex: number;
+  candidateSearchContext: Map<string, CandidateSearchContext>;
+}): void {
+  for (const candidate of candidates) {
+    if (candidateSearchContext.has(candidate.id)) continue;
+    candidateSearchContext.set(candidate.id, {
+      source: search.source,
+      query: search.query,
+      waveIndex,
+      rationale: search.rationale,
+    });
+  }
+}
+
+export function buildResearchFeedback({
+  pageTriageDecisions,
+  fetchedDocuments,
+  candidates,
+  candidateSearchContext,
+}: {
+  pageTriageDecisions: PageTriageDecision[];
+  fetchedDocuments: FetchedDocument[];
+  candidates: EvidenceCandidate[];
+  candidateSearchContext: Map<string, CandidateSearchContext>;
+}): ResearchFeedback | undefined {
+  const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const documentById = new Map(
+    fetchedDocuments.map((document) => [document.candidateId, document])
+  );
+  const rejectedPages = pageTriageDecisions
+    .filter((decision) => decision.decision !== "accept")
+    .flatMap((decision) => {
+      const candidate = candidateById.get(decision.candidateId);
+      const document = documentById.get(decision.candidateId);
+      if (!candidate || !document) return [];
+      const searchContext = candidateSearchContext.get(decision.candidateId);
+      const rejectionReason =
+        normalizeFeedbackText(decision.rejectionReason) ||
+        normalizeFeedbackText(decision.reasoning[0]) ||
+        "Rejected by page triage.";
+
+      return [
+        {
+          candidateId: decision.candidateId,
+          source: candidate.source,
+          title: candidate.title,
+          url: document.url || candidate.canonicalUrl || candidate.sourceUrl,
+          originalSearchQuery: searchContext?.query,
+          rejectionReason,
+          pageType: decision.pageType,
+          confidence: decision.confidence,
+          reasoning: normalizeFeedbackStrings(decision.reasoning).slice(0, 3),
+          followUpSearches: normalizeFollowUpSearches(decision.followUpSearches),
+          decision: decision.decision,
+          hyperbrowserFit: decision.hyperbrowserFit,
+        },
+      ];
+    });
+
+  const suggestedSearches = normalizeFollowUpSearches(
+    rejectedPages.flatMap((page) => page.followUpSearches)
+  );
+
+  if (!rejectedPages.length && !suggestedSearches.length) {
+    return undefined;
+  }
+
+  return {
+    summary: buildFeedbackSummary(rejectedPages),
+    rejectedPages: rejectedPages.map((page) => ({
+      candidateId: page.candidateId,
+      source: page.source,
+      title: page.title,
+      url: page.url,
+      originalSearchQuery: page.originalSearchQuery,
+      rejectionReason: page.rejectionReason,
+      pageType: page.pageType,
+      confidence: page.confidence,
+      reasoning: page.reasoning,
+      followUpSearches: page.followUpSearches,
+    })),
+    suggestedSearches,
+  };
+}
+
+function buildFeedbackSummary(
+  rejectedPages: Array<{
+    rejectionReason: string;
+    pageType?: string;
+    decision: PageTriageDecision["decision"];
+    hyperbrowserFit: number;
+  }>
+): string[] {
+  const summary: string[] = [];
+
+  if (rejectedPages.length) {
+    summary.push(`${rejectedPages.length} fetched pages need routing adjustment.`);
+  }
+
+  const commonPageType = mostCommon(
+    rejectedPages
+      .map((page) => normalizeFeedbackText(page.pageType))
+      .filter(Boolean)
+  );
+  if (commonPageType) {
+    summary.push(`Common rejected page type: ${commonPageType}.`);
+  }
+
+  const repeatedReason = mostCommon(
+    rejectedPages.map((page) => page.rejectionReason).filter(Boolean)
+  );
+  if (repeatedReason) {
+    summary.push(`Repeated rejection: ${repeatedReason}`);
+  }
+
+  const lowFitCount = rejectedPages.filter(
+    (page) => page.hyperbrowserFit < 0.35
+  ).length;
+  if (lowFitCount) {
+    summary.push(`${lowFitCount} pages had low Hyperbrowser fit.`);
+  }
+
+  const needsContextCount = rejectedPages.filter(
+    (page) => page.decision === "needs_more_context"
+  ).length;
+  if (needsContextCount) {
+    summary.push(`${needsContextCount} pages needed more context.`);
+  }
+
+  return summary.slice(0, 5);
+}
+
+function mostCommon(values: string[]): string | undefined {
+  const counts = new Map<string, number>();
+
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return [...counts.entries()].sort(
+    ([leftValue, leftCount], [rightValue, rightCount]) =>
+      rightCount - leftCount || leftValue.localeCompare(rightValue)
+  )[0]?.[0];
+}
+
+function normalizeFeedbackStrings(values: unknown[]): string[] {
+  return values
+    .map(normalizeFeedbackText)
+    .filter((value): value is string => Boolean(value));
+}
+
+function normalizeFollowUpSearches(values: unknown[]): string[] {
+  const seen = new Set<string>();
+  const searches: string[] = [];
+
+  for (const value of normalizeFeedbackStrings(values)) {
+    if (value.length < 3 || value.length > 96) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    searches.push(value);
+  }
+
+  return searches;
+}
+
+function normalizeFeedbackText(value: unknown): string {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
 function defaultSearchAdapter(client: Hyperbrowser): SearchAdapter {

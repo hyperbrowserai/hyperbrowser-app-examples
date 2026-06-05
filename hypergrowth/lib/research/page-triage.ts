@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isNoiseEvidence } from "../evidence-quality";
 import { extractJsonObject } from "../json-utils";
-import { getLLMClient } from "../llm/provider";
+import { getLLMClient, withReasoningEffort } from "../llm/provider";
 import { truncateRunEventText } from "../run-events";
 import {
   categorizePain,
@@ -62,13 +62,13 @@ export async function triageFetchedPages({
   candidates,
   fetchedDocuments,
   maxDecisions,
-  allowLLM,
+  remainingLLMCalls,
 }: {
   query: string;
   candidates: EvidenceCandidate[];
   fetchedDocuments: FetchedDocument[];
   maxDecisions: number;
-  allowLLM: boolean;
+  remainingLLMCalls: number;
 }): Promise<PageTriageResult> {
   const fetches = fetchedDocuments.filter(
     (document) => document.status === "success"
@@ -82,7 +82,7 @@ export async function triageFetchedPages({
     };
   }
 
-  if (!allowLLM) {
+  if (remainingLLMCalls <= 0) {
     return {
       decisions: [],
       mode: "disabled",
@@ -105,89 +105,104 @@ export async function triageFetchedPages({
     };
   }
 
-  try {
-    const response = await llm.client.chat.completions.create({
-      model: llm.metadata.model ?? "gpt-4.1-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You triage Hyperbrowser-fetched pages for public developer-pain evidence. Use only supplied artifacts. Return strict JSON only.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: "Decide whether each fetched browser page is usable growth evidence.",
-            query,
-            pages: buildPagePackets({
-              query,
-              candidates,
-              fetchedDocuments: fetches,
-            }),
-            acceptOnlyIf: [
-              "The page contains concrete developer-authored pain, failure, workaround, bug, incident, migration issue, or infra/workflow friction.",
-              "evidenceQuote must be copied from markdownExcerpt or candidate text.",
-              "The evidence is relevant to browser automation, scraping, anti-bot reliability, sessions, proxies, dynamic extraction, or developer workflow friction.",
-            ],
-            rejectIf: [
-              "The page is a login wall, block wall, cookie banner, search result UI, navigation chrome, homepage, vendor marketing page, job ad, launch announcement, or generic listicle.",
-              "The quote is inferred from the screenshot, branding, or your own summary rather than present in supplied text.",
-            ],
-            decisionMeanings: {
-              accept: "usable evidence with a grounded quote",
-              reject: "not usable evidence",
-              needs_more_context:
-                "promising but needs another source or search before it can become evidence",
-            },
-            outputShape: {
-              decisions: [
-                {
-                  candidateId: "string",
-                  decision: "accept | reject | needs_more_context",
-                  evidenceQuote: "verbatim quote when accepted",
-                  evidenceTitle: "short title when accepted",
-                  pageType: "forum-thread | issue | docs | article | other",
-                  painCategory: painCategories[0],
-                  hyperbrowserFit: 0.5,
-                  confidence: 0.5,
-                  reasoning: ["short reason"],
-                  rejectionReason: "short reason when rejected",
-                  followUpSearches: ["short search query when needed"],
-                  artifactSignals: ["markdown", "json"],
-                },
-              ],
-            },
-            maxAccepted: maxDecisions,
-          }),
-        },
-      ],
-    });
-    const content = response.choices[0]?.message.content;
-    if (!content) throw new Error("LLM returned empty page triage.");
+  let attempts = 0;
+  let lastError: unknown;
+  const maxAttempts = Math.min(3, remainingLLMCalls);
 
-    return {
-      decisions: sanitizePageTriageDecisions({
-        candidates,
-        fetchedDocuments: fetches,
-        decisions: parsePageTriageContent(content).decisions,
-      }).slice(0, maxDecisions),
-      mode: "used",
-      callsAttempted: 1,
-    };
-  } catch (error) {
-    return {
-      decisions: deterministicPageTriage({
-        query,
-        candidates,
-        fetchedDocuments: fetches,
-        maxDecisions,
-      }),
-      mode: "fallback",
-      callsAttempted: 1,
-      failureReason: `Page triage failed: ${error}`,
-    };
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      const previousFailure = attempts > 1 ? String(lastError) : undefined;
+      const response = await llm.client.chat.completions.create(
+        withReasoningEffort({
+          model: llm.metadata.model ?? "gpt-4.1-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "You triage Hyperbrowser-fetched pages for public developer-pain evidence. Use only supplied artifacts. Return strict JSON only.",
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                task: previousFailure
+                  ? "Repair the previous page-triage failure and return valid JSON."
+                  : "Decide whether each fetched browser page is usable growth evidence.",
+                previousFailure,
+                query,
+                pages: buildPagePackets({
+                  query,
+                  candidates,
+                  fetchedDocuments: fetches,
+                }),
+                acceptOnlyIf: [
+                  "The page contains concrete developer-authored pain, failure, workaround, bug, incident, migration issue, or infra/workflow friction.",
+                  "evidenceQuote must be copied from markdownExcerpt or candidate text.",
+                  "The evidence is relevant to browser automation, scraping, anti-bot reliability, sessions, proxies, dynamic extraction, or developer workflow friction.",
+                ],
+                rejectIf: [
+                  "The page is a login wall, block wall, cookie banner, search result UI, navigation chrome, homepage, vendor marketing page, job ad, launch announcement, or generic listicle.",
+                  "The quote is inferred from the screenshot, branding, or your own summary rather than present in supplied text.",
+                ],
+                decisionMeanings: {
+                  accept: "usable evidence with a grounded quote",
+                  reject: "not usable evidence",
+                  needs_more_context:
+                    "promising but needs another source or search before it can become evidence",
+                },
+                outputShape: {
+                  decisions: [
+                    {
+                      candidateId: "string",
+                      decision: "accept | reject | needs_more_context",
+                      evidenceQuote: "verbatim quote when accepted",
+                      evidenceTitle: "short title when accepted",
+                      pageType: "forum-thread | issue | docs | article | other",
+                      painCategory: painCategories[0],
+                      hyperbrowserFit: 0.5,
+                      confidence: 0.5,
+                      reasoning: ["short reason"],
+                      rejectionReason: "short reason when rejected",
+                      followUpSearches: ["short search query when needed"],
+                      artifactSignals: ["markdown", "json"],
+                    },
+                  ],
+                },
+                maxAccepted: maxDecisions,
+              }),
+            },
+          ],
+        })
+      );
+      const content = response.choices[0]?.message.content;
+      if (!content) throw new Error("LLM returned empty page triage.");
+
+      return {
+        decisions: sanitizePageTriageDecisions({
+          candidates,
+          fetchedDocuments: fetches,
+          decisions: parsePageTriageContent(content).decisions,
+        }).slice(0, maxDecisions),
+        mode: "used",
+        callsAttempted: attempts,
+      };
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  return {
+    decisions: deterministicPageTriage({
+      query,
+      candidates,
+      fetchedDocuments: fetches,
+      maxDecisions,
+    }),
+    mode: "fallback",
+    callsAttempted: attempts,
+    failureReason: `Page triage failed after ${attempts} attempts: ${lastError}`,
+  };
 }
 
 export function parsePageTriageContent(

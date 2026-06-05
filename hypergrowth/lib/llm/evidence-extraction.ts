@@ -2,7 +2,7 @@ import { z } from "zod";
 import { deterministicExtract } from "../deterministic-extraction";
 import { extractJsonObject } from "../json-utils";
 import { isLLMTransportError } from "./errors";
-import { getLLMClient } from "./provider";
+import { getLLMClient, withReasoningEffort } from "./provider";
 import type { EvidenceCandidate, RawSignal } from "../types";
 
 const evidenceKinds = [
@@ -100,54 +100,56 @@ async function requestEvidenceExtraction(
   const llm = getLLMClient();
   if (!llm) throw new Error("No LLM provider configured.");
 
-  const response = await llm.client.chat.completions.create({
-    model: llm.metadata.model ?? "gpt-4.1-mini",
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You extract grounded developer pain evidence for HyperGrowth. Use only supplied source text. Return strict JSON only.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          task: repairInput
-            ? "Repair the previous extraction failure and return valid JSON."
-            : "Extract real developer-authored pain evidence.",
-          previousFailure: repairInput,
-          query,
-          constraints: [
-            "Set isEvidence=false for login pages, block walls, no-result pages, nav chrome, or generic marketing.",
-            "Quotes must be copied from title, snippet, or body text.",
-            "Quotes should be concise but specific, 40 to 420 characters when possible.",
-            "Do not invent people, companies, URLs, or pain.",
-          ],
-          candidates: candidates.map((candidate) => ({
-            candidateId: candidate.id,
-            source: candidate.source,
-            title: candidate.title,
-            snippet: candidate.snippet,
-            body: candidate.body?.slice(0, 2400),
-            evidenceKind: candidate.evidenceKind,
-            url: candidate.canonicalUrl ?? candidate.sourceUrl,
-          })),
-          shape: {
-            evidence: [
-              {
-                candidateId: "string",
-                isEvidence: true,
-                title: "string",
-                quote: "string",
-                evidenceKind: "issue",
-                rejectedReason: "string",
-              },
+  const response = await llm.client.chat.completions.create(
+    withReasoningEffort({
+      model: llm.metadata.model ?? "gpt-4.1-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You extract grounded developer pain evidence for HyperGrowth. Use only supplied source text. Return strict JSON only.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: repairInput
+              ? "Repair the previous extraction failure and return valid JSON."
+              : "Extract real developer-authored pain evidence.",
+            previousFailure: repairInput,
+            query,
+            constraints: [
+              "Set isEvidence=false for login pages, block walls, no-result pages, nav chrome, or generic marketing.",
+              "Quotes must be copied from title, snippet, or body text.",
+              "Quotes should be concise but specific, 40 to 420 characters when possible.",
+              "Do not invent people, companies, URLs, or pain.",
             ],
-          },
-        }),
-      },
-    ],
-  });
+            candidates: candidates.map((candidate) => ({
+              candidateId: candidate.id,
+              source: candidate.source,
+              title: candidate.title,
+              snippet: candidate.snippet,
+              body: candidate.body?.slice(0, 2400),
+              evidenceKind: candidate.evidenceKind,
+              url: candidate.canonicalUrl ?? candidate.sourceUrl,
+            })),
+            shape: {
+              evidence: [
+                {
+                  candidateId: "string",
+                  isEvidence: true,
+                  title: "string",
+                  quote: "string",
+                  evidenceKind: "issue",
+                  rejectedReason: "string",
+                },
+              ],
+            },
+          }),
+        },
+      ],
+    })
+  );
 
   const content = response.choices[0]?.message.content;
   if (!content) throw new Error("LLM returned empty evidence extraction.");

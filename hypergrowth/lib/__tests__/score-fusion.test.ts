@@ -3,7 +3,7 @@ import { fuseLLMJudgments } from "../score-fusion";
 import type { LLMJudgment, PainSignal, SignalScore } from "../types";
 
 describe("fuseLLMJudgments", () => {
-  it("uses dimension-specific fusion and refines category plus quote", () => {
+  it("uses LLM-authored dimensions as final scores and refines category plus quote", () => {
     const signal = makeSignal();
     const score = makeScore();
     const judgment: LLMJudgment = {
@@ -28,10 +28,13 @@ describe("fuseLLMJudgments", () => {
 
     expect(fused.signals[0].painCategory).toBe("anti_bot_reliability");
     expect(fused.signals[0].quote).toBe(judgment.representativeQuote);
-    expect(fused.scores[0].relevance).toBe(0.81);
-    expect(fused.scores[0].painIntensity).toBe(0.71);
-    expect(fused.scores[0].commercialIntent).toBe(0.602);
-    expect(fused.scores[0].hyperbrowserFit).toBe(0.837);
+    expect(fused.scores[0].relevance).toBe(0.9);
+    expect(fused.scores[0].painIntensity).toBe(0.8);
+    expect(fused.scores[0].commercialIntent).toBe(0.7);
+    expect(fused.scores[0].hyperbrowserFit).toBe(0.95);
+    expect(fused.scores[0].confidence).toBe(0.75);
+    expect(fused.scores[0].total).toBe(0.805);
+    expect(fused.scores[0].reasons).toContain("LLM: judged final score");
     expect(fused.scores[0].reasons).toContain(
       "LLM: Specific production anti-bot failure"
     );
@@ -60,6 +63,20 @@ describe("fuseLLMJudgments", () => {
 
     expect(fused.scores[0].total).toBe(0.25);
     expect(fused.scores[0].reasons).toContain("LLM: marked as not actionable");
+  });
+
+  it("marks unjudged signals as deterministic fallback when full judgment is partial", () => {
+    const fused = fuseLLMJudgments({
+      signals: [makeSignal()],
+      scores: [makeScore()],
+      judgments: [],
+      fallbackReason: "LLM judgment failed after repair",
+    });
+
+    expect(fused.scores[0].total).toBe(0.65);
+    expect(fused.scores[0].reasons).toContain(
+      "LLM: deterministic fallback (LLM judgment failed after repair)"
+    );
   });
 });
 

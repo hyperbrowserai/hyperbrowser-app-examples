@@ -29,7 +29,7 @@ describe("executeMineRun", () => {
           query: "captcha failures with playwright",
           sources: ["github", "hyperbrowser"],
           maxResults: 6,
-          analysisMode: "balanced",
+          analysisMode: "full",
         },
         {
           emit: (event) => {

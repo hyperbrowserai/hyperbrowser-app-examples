@@ -26,7 +26,7 @@ import type {
   SignalSource,
   SourceDebugSummary,
 } from "./types";
-import type { ResearchPlan } from "./research/types";
+import type { ResearchFeedback, ResearchPlan } from "./research/types";
 
 type ExecuteMineRunResult =
   | { ok: true; result: MineResult }
@@ -190,7 +190,9 @@ export async function executeMineRun(
         rawSignals,
         searchDiagnostics,
         fetchedDocuments: research.diagnostics.fetchedDocuments,
+        maxFetchesPerRun: Math.max(5, maxResults * 2),
       }),
+      researchFeedback: buildResearchFeedbackTrace(research.diagnostics.feedback),
       sourceDebug,
       timings: finishTimings(timings, totalStartedAt),
     });
@@ -234,7 +236,9 @@ export async function executeMineRun(
         rawSignals,
         searchDiagnostics,
         fetchedDocuments: research.diagnostics.fetchedDocuments,
+        maxFetchesPerRun: Math.max(5, maxResults * 2),
       }),
+      researchFeedback: buildResearchFeedbackTrace(research.diagnostics.feedback),
       sourceDebug,
       timings: finishTimings(timings, totalStartedAt),
     });
@@ -250,8 +254,9 @@ export async function executeMineRun(
   const pipeline = await measurePhase(timings, "pipeline", () =>
     runSignalPipeline(query, normalizedSignals, {
       effectiveAnalysisMode: mode.effectiveAnalysisMode,
-      allowJudgment: ["balanced", "full"].includes(mode.effectiveAnalysisMode),
+      allowJudgment: mode.effectiveAnalysisMode === "full",
       allowSynthesis: mode.effectiveAnalysisMode === "full",
+      maxLLMCalls: mode.allowedCalls,
       llm: llmMetadata,
     })
   );
@@ -318,7 +323,9 @@ export async function executeMineRun(
         rawSignals,
         searchDiagnostics,
         fetchedDocuments: research.diagnostics.fetchedDocuments,
+        maxFetchesPerRun: Math.max(5, maxResults * 2),
       }),
+      researchFeedback: buildResearchFeedbackTrace(research.diagnostics.feedback),
       sourceDebug: buildSourceDebug({
         sources: researchSources,
         candidates,
@@ -530,6 +537,7 @@ function buildHyperbrowserRunTrace({
   rawSignals,
   searchDiagnostics,
   fetchedDocuments,
+  maxFetchesPerRun,
 }: {
   candidates: EvidenceCandidate[];
   qualityRejected: EvidenceCandidate[];
@@ -585,6 +593,7 @@ function buildHyperbrowserRunTrace({
     status: "success" | "error" | "skipped";
     error?: string;
   }>;
+  maxFetchesPerRun: number;
 }): HyperbrowserRunTrace {
   const hyperbrowserCandidates = candidates.filter(
     (candidate) => candidate.source === "hyperbrowser"
@@ -625,31 +634,21 @@ function buildHyperbrowserRunTrace({
       pageTriage: document.pageTriage
         ? {
             decision: document.pageTriage.decision,
-            evidenceQuote: document.pageTriage.evidenceQuote
-              ? truncateRunEventText(document.pageTriage.evidenceQuote, 260)
-              : undefined,
-            evidenceTitle: document.pageTriage.evidenceTitle
-              ? truncateRunEventText(document.pageTriage.evidenceTitle, 120)
-              : undefined,
+            evidenceQuote: document.pageTriage.evidenceQuote,
+            evidenceTitle: document.pageTriage.evidenceTitle,
             pageType: document.pageTriage.pageType,
             painCategory: document.pageTriage.painCategory,
             hyperbrowserFit: document.pageTriage.hyperbrowserFit,
             confidence: document.pageTriage.confidence,
-            reasoning: document.pageTriage.reasoning.map((reason) =>
-              truncateRunEventText(reason, 180)
-            ),
-            rejectionReason: document.pageTriage.rejectionReason
-              ? truncateRunEventText(document.pageTriage.rejectionReason, 180)
-              : undefined,
-            followUpSearches: document.pageTriage.followUpSearches.map((search) =>
-              truncateRunEventText(search, 100)
-            ),
+            reasoning: document.pageTriage.reasoning,
+            rejectionReason: document.pageTriage.rejectionReason,
+            followUpSearches: document.pageTriage.followUpSearches,
             artifactSignals: document.pageTriage.artifactSignals,
           }
         : undefined,
       qualityFlags: candidate?.qualityFlags ?? [],
       evidenceAccepted: Boolean(signal),
-      acceptedQuote: signal ? truncateRunEventText(signal.quote, 260) : undefined,
+      acceptedQuote: signal ? signal.quote : undefined,
     };
   });
   const fetchOutputFormats = Array.from(
@@ -663,7 +662,7 @@ function buildHyperbrowserRunTrace({
         ? fetchOutputFormats
         : ["markdown", "links"],
       mandatoryDiscovery: true,
-      maxFetchesPerRun: 5,
+      maxFetchesPerRun,
     },
     searches: searchDiagnostics
       .filter((search) => search.source === "hyperbrowser")
@@ -685,6 +684,25 @@ function buildHyperbrowserRunTrace({
   };
 }
 
+function buildResearchFeedbackTrace(feedback: ResearchFeedback[]) {
+  return feedback.map((packet) => ({
+    summary: packet.summary,
+    rejectedPages: packet.rejectedPages.slice(0, 8).map((page) => ({
+      candidateId: page.candidateId,
+      source: page.source,
+      title: page.title,
+      url: page.url,
+      originalSearchQuery: page.originalSearchQuery,
+      rejectionReason: page.rejectionReason,
+      pageType: page.pageType,
+      confidence: page.confidence,
+      reasoning: page.reasoning,
+      followUpSearches: page.followUpSearches,
+    })),
+    suggestedSearches: packet.suggestedSearches,
+  }));
+}
+
 function buildEmptyLiveResult({
   query,
   sources,
@@ -696,6 +714,7 @@ function buildEmptyLiveResult({
   executedSearches,
   searchDiagnostics,
   hyperbrowserRun,
+  researchFeedback,
   sourceDebug,
   timings,
 }: {
@@ -709,6 +728,7 @@ function buildEmptyLiveResult({
   executedSearches: MineResult["metadata"]["executedSearches"];
   searchDiagnostics: SearchDiagnostic[];
   hyperbrowserRun: HyperbrowserRunTrace;
+  researchFeedback: MineResult["metadata"]["researchFeedback"];
   sourceDebug: SourceDebugSummary[];
   timings: PhaseTiming[];
 }): MineResult {
@@ -757,6 +777,7 @@ function buildEmptyLiveResult({
       executedSearches,
       searchDiagnostics,
       hyperbrowserRun,
+      researchFeedback,
       sourceDebug,
       timings,
       llm,
