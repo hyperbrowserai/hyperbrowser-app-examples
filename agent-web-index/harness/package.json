@@ -1,0 +1,24 @@
+{
+  "name": "agent-web-index-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drives GLM-5.2, Claude Opus 4.8, and GPT-5.5 through the same Hyperbrowser cloud browser on the same tasks, scores pass/fail over N runs, and writes real Site[] output to ../lib/results.json.",
+  "scripts": {
+    "postinstall": "playwright install chromium",
+    "bench": "tsx run.ts",
+    "bench:one": "tsx run-one.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "@hyperbrowser/sdk": "^0.82.2",
+    "dotenv": "^16.4.5",
+    "openai": "^6.17.0",
+    "playwright": "^1.59.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
