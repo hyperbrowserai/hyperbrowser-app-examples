@@ -4,6 +4,8 @@
 
 HyperScript is a local Next.js app for turning a plain-English web task into a real TypeScript HyperAgent script, watching it run in a Hyperbrowser Live View, and keeping the script as a reusable growth automation artifact.
 
+Compatible with Claude Sonnet 5 (coming soon).
+
 ## Setup
 
 ```bash
