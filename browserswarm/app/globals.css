@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/* ── Design tokens (shared visual language with AgentRank) ───────────────── */
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  --muted: #6b7280;
+  --line: #e5e5e5;
+  --accent: #facc15; /* the AgentRank "running" yellow */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-manrope), sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), sans-serif;
+}
+
+@layer utilities {
+  /* AgentRank hard-shadow scale */
+  .shadow-brutal {
+    box-shadow: 4px 4px 0px 0px #000000;
+  }
+  .shadow-brutal-lg {
+    box-shadow: 8px 8px 0px 0px #000000;
+  }
+  .shadow-brutal-sm {
+    box-shadow: 2px 2px 0px 0px #000000;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────────── */
+@keyframes swarm-pulse {
+  0%,
+  100% {
+    box-shadow: 4px 4px 0px 0px #000000;
+  }
+  50% {
+    box-shadow: 4px 4px 0px 0px var(--accent);
+  }
+}
+.animate-swarm-pulse {
+  animation: swarm-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes scan-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+.animate-scan-sweep {
+  animation: scan-sweep 1.4s linear infinite;
+}
+
+@keyframes meter-glow {
+  0%,
+  100% {
+    background-color: #000000;
+  }
+  50% {
+    background-color: #1f1f1f;
+  }
+}
