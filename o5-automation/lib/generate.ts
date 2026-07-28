@@ -1,7 +1,7 @@
 import { CONFIG } from "./config";
 import { getAnthropic, withProviderRetry } from "./anthropic";
-import { extractCode, type ChatMessage } from "./prompts";
-import type { Emit, Usage } from "./types";
+import type { ChatMessage } from "./prompts";
+import type { Usage } from "./types";
 import type { MessageParam, Usage as AnthropicUsage } from "@anthropic-ai/sdk/resources/messages";
 
 /** Accumulate real Anthropic usage across every model call in a run. */
@@ -21,6 +21,14 @@ export class UsageMeter {
       // We asked for usage and didn't get it — flag the numbers as inexact.
       this.exact = false;
     }
+  }
+
+  /** Add measured usage reported by Hyperbrowser's Computer Use task. */
+  addCounts(inputTokens?: number | null, outputTokens?: number | null) {
+    if (typeof inputTokens === "number") this.input += inputTokens;
+    else this.exact = false;
+    if (typeof outputTokens === "number") this.output += outputTokens;
+    else this.exact = false;
   }
 
   snapshot(): Usage {
@@ -66,7 +74,7 @@ function firstJsonObject(text: string): string | null {
   return null;
 }
 
-/** Non-streaming JSON call (planner, nav request). Returns parsed object. */
+/** Make a strict JSON call for safety planning and memory extraction. */
 export async function callJson<T>(
   messages: ChatMessage[],
   meter: UsageMeter,
@@ -89,48 +97,4 @@ export async function callJson<T>(
   const json = firstJsonObject(content);
   if (!json) throw new Error(`${CONFIG.model} did not return JSON: ${content.slice(0, 200)}`);
   return JSON.parse(json) as T;
-}
-
-export interface ScriptResult {
-  script: string;
-  rawContent: string;
-}
-
-/** Stream only text blocks; thinking blocks are intentionally not treated as code. */
-export async function streamScript(
-  messages: ChatMessage[],
-  meter: UsageMeter,
-  emit: Emit,
-  onRetry?: (attempt: number, waitMs: number) => void
-): Promise<ScriptResult> {
-  const client = getAnthropic();
-  const request = toAnthropicRequest(messages);
-
-  return withProviderRetry(
-    async () => {
-      let rawContent = "";
-      let lastFenceStripLen = 0;
-      const stream = client.messages.stream({
-        model: CONFIG.model,
-        max_tokens: CONFIG.scriptMaxTokens,
-        system: request.system,
-        messages: request.messages,
-      });
-
-      for await (const event of stream) {
-        if (event.type !== "content_block_delta" || event.delta.type !== "text_delta") continue;
-        rawContent += event.delta.text;
-        const cleaned = extractCode(rawContent);
-        if (cleaned.length > lastFenceStripLen) {
-          emit({ t: "script_delta", delta: cleaned.slice(lastFenceStripLen) });
-          lastFenceStripLen = cleaned.length;
-        }
-      }
-
-      const finalMessage = await stream.finalMessage();
-      meter.add(finalMessage.usage);
-      return { script: extractCode(rawContent), rawContent };
-    },
-    { onRetry }
-  );
 }

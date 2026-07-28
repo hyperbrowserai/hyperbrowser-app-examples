@@ -4,30 +4,21 @@ export interface RunRequest {
   task: string;
   /** Optional explicit URL. If absent we try to pull one from the task text. */
   url?: string;
-  /** Optional login creds — forwarded to the run as env, never written to the
-   *  script, never persisted, never logged. */
-  username?: string;
-  password?: string;
 }
 
 // ── Pipeline phases (left panel steps) ──────────────────────────────────────
 export type Phase =
-  | "inspecting"
-  | "writing"
+  | "remembering"
   | "running"
-  | "repairing"
+  | "learning"
   | "done"
   | "failed";
 
 // ── Extracted result shape ──────────────────────────────────────────────────
 export interface RunResult {
-  /** Whatever the script printed via @@RESULT@@ (parsed JSON, else raw string). */
+  /** Claude Computer Use's real final result (parsed as JSON when possible). */
   data: unknown;
-  /** Full stdout from the sandbox run. */
-  stdout: string;
-  /** Final-page screenshot, base64 PNG (data URI body only), or null. */
-  screenshotB64: string | null;
-  /** @@STEP@@ labels the script announced, in order. */
+  /** Measured Computer Use actions in order. */
   steps: string[];
 }
 
@@ -38,25 +29,69 @@ export interface Usage {
   exact: boolean;
 }
 
+// ── Per-site memory, surfaced to the UI ─────────────────────────────────────
+export type MemoryMissReason = "no_memory_file";
+
+export type MemoryGraphKind =
+  | "selector"
+  | "navigation"
+  | "flow"
+  | "repair"
+  | "structure"
+  | "environment";
+
+export interface MemoryGraphEntry {
+  id: string;
+  kind: MemoryGraphKind;
+  label: string;
+  detail: string;
+  reused: number;
+}
+
+export interface MemoryGraphData {
+  entries: MemoryGraphEntry[];
+}
+
+export interface MemorySnapshot {
+  domain: string;
+  hit: boolean;
+  priorRuns: number;
+  selectors: number;
+  repairs: number;
+  navPaths: number;
+  flows: number;
+  notes: number;
+  envFacts: number;
+  graph: MemoryGraphData;
+}
+
+/** Measured comparison between the first recorded run and this one. */
+export interface MemoryComparison {
+  first: { at: number; steps: number; elapsedMs: number; inputTokens: number; outputTokens: number };
+  current: { steps: number; elapsedMs: number; inputTokens: number; outputTokens: number };
+}
+
 // ── Streamed events (NDJSON, one JSON object per line) ───────────────────────
 export type RunEvent =
   | { t: "init"; startedAt: number; model: string; task: string }
   | { t: "phase"; phase: Phase; at: number }
-  // The Live View URL for whichever session is currently on screen (inspect,
-  // then the execution session).
+  // Hyperbrowser's embedded Claude Computer Use Live View.
   | { t: "live"; url: string | null; label: string }
   // Planner output: resolved URL + safety verdict.
   | { t: "plan"; url: string; note: string }
-  | { t: "inspect"; msg: string; elements?: number; links?: number; forms?: number; chars?: number }
-  // K3 streaming the script into view.
-  | { t: "script_delta"; delta: string }
-  | { t: "script_done"; script: string; phase: Phase }
+  // ── Memory ────────────────────────────────────────────────────────────────
+  // Loaded before the agent starts. hit=false means exploration.
+  | { t: "memory"; snapshot: MemorySnapshot; missReason: MemoryMissReason | null }
+  | { t: "memory_reuse"; entries: string[] }
+  | { t: "memory_repair_applied"; error: string; fix: string }
+  | { t: "memory_learned"; graph: MemoryGraphData; selectors: number; navPaths: number; flows: number; repairs: number; envFacts: number; labels: string[]; stale: string[] }
+  | { t: "memory_write"; selectors: number; navPaths: number; flows: number; repairs: number; notes: number; envFacts: number; bytes: number; pruned: number; created: boolean; graph: MemoryGraphData }
+  | { t: "memory_comparison"; comparison: MemoryComparison }
   | { t: "run"; msg: string }
   | { t: "step"; label: string }
-  | { t: "repair"; attempt: number; reason: string }
-  | { t: "result"; result: RunResult; repaired: boolean }
+  | { t: "result"; result: RunResult }
   | { t: "usage"; usage: Usage }
-  | { t: "done"; elapsedMs: number; repaired: boolean; ok: boolean }
+  | { t: "done"; elapsedMs: number; ok: boolean }
   // Terminal, honest failures.
   | { t: "need_url" }
   | { t: "refused"; reason: string }

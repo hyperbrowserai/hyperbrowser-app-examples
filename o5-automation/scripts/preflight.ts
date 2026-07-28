@@ -18,6 +18,10 @@ async function main() {
   const hyperbrowser = new Hyperbrowser({ apiKey: hyperbrowserKey });
   await hyperbrowser.sessions.getActiveSessionsCount();
   console.log("Hyperbrowser API key: verified");
+  if (typeof hyperbrowser.agents.claudeComputerUse.start !== "function") {
+    throw new Error("Installed @hyperbrowser/sdk does not expose Claude Computer Use.");
+  }
+  console.log("Claude Computer Use SDK: verified");
 
   const anthropic = new Anthropic({ apiKey: anthropicKey, maxRetries: 0 });
 

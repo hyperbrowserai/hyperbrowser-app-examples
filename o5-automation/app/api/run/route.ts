@@ -1,29 +1,82 @@
-import { CONFIG, SANDBOX_PATHS } from "@/lib/config";
-import { UsageMeter, callJson, streamScript } from "@/lib/generate";
+import { runComputerUse, computerUseEvidence } from "@/lib/computer-use";
+import { CONFIG } from "@/lib/config";
+import { UsageMeter, callJson } from "@/lib/generate";
 import { getHyperbrowser } from "@/lib/hyperbrowser";
-import { captureCurrentSession, openInspector } from "@/lib/inspect";
 import {
-  buildGeneratorMessages,
-  buildNavRequestMessages,
+  domainKeyOf,
+  emptyMemory,
+  firstRecordedRun,
+  graphDataOf,
+  loadMemory,
+  markFlowsReused,
+  markNavPathsReused,
+  markRepairsReused,
+  markSelectorsReused,
+  recordRun,
+  rememberEnvFact,
+  rememberFlow,
+  rememberNavPath,
+  rememberNote,
+  rememberRepair,
+  rememberSelector,
+  saveMemory,
+  statsOf,
+  type DomainMemory,
+  type EnvFactKind,
+  type RepairMemory,
+} from "@/lib/memory";
+import {
+  buildComputerUseTask,
+  buildMemoryDeltaMessages,
   buildPlannerMessages,
-  buildRepairMessages,
-  taskNeedsLogin,
+  type MemoryDelta,
 } from "@/lib/prompts";
-import { provisionSandbox, runScript, stopSandbox } from "@/lib/sandbox";
 import type { Emit, RunRequest } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/i;
+const ENV_FACT_KINDS = new Set<EnvFactKind>([
+  "stealth_required",
+  "captcha",
+  "proxy_blocked",
+  "login_required",
+  "other",
+]);
+
+interface WriteCounts {
+  selectors: number;
+  navPaths: number;
+  flows: number;
+  notes: number;
+  repairs: number;
+  envFacts: number;
+}
+
+interface ReuseState {
+  selectors: Set<string>;
+  navPaths: Set<string>;
+  flows: Set<string>;
+  repairs: Map<string, RepairMemory>;
+  staleSelectors: Set<string>;
+}
+
+interface ObservedState {
+  selectors: Set<string>;
+  navPaths: Set<string>;
+  flows: Set<string>;
+  notes: Set<string>;
+  repairs: Set<string>;
+  envFacts: Set<string>;
+}
 
 function resolveUrl(task: string, supplied?: string): string | null {
   const raw = supplied?.trim() || task.match(URL_PATTERN)?.[0];
   if (!raw) return null;
   try {
     const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return url.toString();
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
   } catch {
     return null;
   }
@@ -31,6 +84,175 @@ function resolveUrl(task: string, supplied?: string): string | null {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function parseAgentResult(value: string): unknown {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return trimmed;
+  }
+}
+
+function hasMemory(memory: DomainMemory | null): memory is DomainMemory {
+  return Boolean(
+    memory &&
+      (memory.runHistory.length ||
+        memory.selectors.length ||
+        memory.navPaths.length ||
+        memory.flows.length ||
+        memory.repairs.length ||
+        memory.envFacts.length)
+  );
+}
+
+function emptyCounts(): WriteCounts {
+  return { selectors: 0, navPaths: 0, flows: 0, notes: 0, repairs: 0, envFacts: 0 };
+}
+
+function addCounts(total: WriteCounts, next: WriteCounts): void {
+  for (const key of Object.keys(total) as Array<keyof WriteCounts>) total[key] += next[key];
+}
+
+/**
+ * Merge only validated, bounded fields into the portable memory document.
+ * The extractor can suggest facts; this boundary decides what is persisted.
+ */
+function applyMemoryDelta(
+  memory: DomainMemory,
+  delta: MemoryDelta,
+  targetUrl: string,
+  at: number,
+  observed: ObservedState
+): { counts: WriteCounts; labels: string[] } {
+  const counts = emptyCounts();
+  const labels: string[] = [];
+
+  for (const entry of delta.selectors ?? []) {
+    const selector = typeof entry.selector === "string" ? entry.selector.trim() : "";
+    if (!selector || observed.selectors.has(selector)) continue;
+    observed.selectors.add(selector);
+    rememberSelector(
+      memory,
+      {
+        selector,
+        resolvedTo: entry.resolvedTo,
+        purpose: entry.purpose,
+        pageUrl: entry.pageUrl || targetUrl,
+      },
+      at
+    );
+    counts.selectors += 1;
+    labels.push(selector);
+  }
+
+  for (const entry of delta.navPaths ?? []) {
+    if (!entry?.goal || !Array.isArray(entry.urls) || !entry.urls.length) continue;
+    const key = entry.urls.join(" > ");
+    if (observed.navPaths.has(key)) continue;
+    observed.navPaths.add(key);
+    rememberNavPath(
+      memory,
+      { goal: entry.goal, urls: entry.urls, params: entry.params },
+      at
+    );
+    counts.navPaths += 1;
+    labels.push(entry.goal);
+  }
+
+  for (const entry of delta.flows ?? []) {
+    if (!entry?.name || !Array.isArray(entry.steps) || !entry.steps.length) continue;
+    const key = entry.name;
+    if (observed.flows.has(key)) continue;
+    observed.flows.add(key);
+    rememberFlow(memory, { name: entry.name, steps: entry.steps }, at);
+    counts.flows += 1;
+    labels.push(entry.name);
+  }
+
+  if (typeof delta.structureNote === "string" && delta.structureNote.trim()) {
+    if (!observed.notes.has(delta.structureNote)) {
+      observed.notes.add(delta.structureNote);
+      rememberNote(memory, { note: delta.structureNote, pageUrl: targetUrl }, at);
+      counts.notes += 1;
+    }
+  }
+
+  for (const entry of delta.repairs ?? []) {
+    if (!entry?.error || !entry.fix) continue;
+    const key = `${entry.error}|${entry.fix}`;
+    if (observed.repairs.has(key)) continue;
+    observed.repairs.add(key);
+    rememberRepair(
+      memory,
+      { error: entry.error, failedApproach: entry.failedApproach ?? "", fix: entry.fix },
+      at
+    );
+    counts.repairs += 1;
+    labels.push(entry.error);
+  }
+
+  for (const entry of delta.envFacts ?? []) {
+    if (!entry?.kind || !ENV_FACT_KINDS.has(entry.kind)) continue;
+    const key = `${entry.kind}|${entry.detail ?? ""}`;
+    if (observed.envFacts.has(key)) continue;
+    observed.envFacts.add(key);
+    rememberEnvFact(memory, { kind: entry.kind, detail: entry.detail ?? "" }, at);
+    counts.envFacts += 1;
+    labels.push(entry.kind.replaceAll("_", " "));
+  }
+
+  return { counts, labels };
+}
+
+function applyMeasuredReuse(
+  memory: DomainMemory,
+  prior: DomainMemory | null,
+  delta: MemoryDelta,
+  reuse: ReuseState
+): void {
+  if (!prior) return;
+
+  const priorSelectors = new Set(prior.selectors.map((entry) => entry.selector));
+  const selectors = (delta.reused?.selectors ?? []).filter(
+    (value) => priorSelectors.has(value) && !reuse.selectors.has(value)
+  );
+  markSelectorsReused(memory, selectors);
+  selectors.forEach((value) => reuse.selectors.add(value));
+
+  const priorPaths = new Set(prior.navPaths.map((entry) => entry.goal));
+  const paths = (delta.reused?.navPaths ?? []).filter(
+    (value) => priorPaths.has(value) && !reuse.navPaths.has(value)
+  );
+  markNavPathsReused(memory, paths);
+  paths.forEach((value) => reuse.navPaths.add(value));
+
+  const priorFlows = new Set(prior.flows.map((entry) => entry.name));
+  const flows = (delta.reused?.flows ?? []).filter(
+    (value) => priorFlows.has(value) && !reuse.flows.has(value)
+  );
+  markFlowsReused(memory, flows);
+  flows.forEach((value) => reuse.flows.add(value));
+
+  const repairByKey = new Map(
+    prior.repairs.map((entry) => [`${entry.error}|${entry.fix}`, entry])
+  );
+  const repairs = (delta.reused?.repairs ?? [])
+    .map((entry) => repairByKey.get(`${entry.error ?? ""}|${entry.fix ?? ""}`))
+    .filter(
+      (entry): entry is RepairMemory =>
+        Boolean(entry) && !reuse.repairs.has(`${entry?.error}|${entry?.fix}`)
+    );
+  markRepairsReused(memory, repairs);
+  repairs.forEach((entry) => reuse.repairs.set(`${entry.error}|${entry.fix}`, entry));
+
+  for (const selector of delta.staleSelectors ?? []) {
+    if (!priorSelectors.has(selector)) continue;
+    reuse.staleSelectors.add(selector);
+    memory.selectors = memory.selectors.filter((entry) => entry.selector !== selector);
+  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -42,26 +264,26 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const task = input.task?.trim();
-  if (!task) return Response.json({ error: "Describe the web task first." }, { status: 400 });
+  if (!task) return Response.json({ error: "Describe the browser task first." }, { status: 400 });
 
   const encoder = new TextEncoder();
+  let closed = false;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      let closed = false;
       const emit: Emit = (event) => {
-        if (!closed) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        } catch {
+          closed = true;
+        }
       };
 
       void (async () => {
         const startedAt = Date.now();
         const meter = new UsageMeter();
-        let client: ReturnType<typeof getHyperbrowser> | null = null;
-        let inspector: Awaited<ReturnType<typeof openInspector>> | null = null;
-        let sandbox: Awaited<ReturnType<typeof provisionSandbox>> | null = null;
-        let executionSessionId: string | null = null;
-
         const retryNotice = (attempt: number, waitMs: number) =>
-          emit({ t: "run", msg: `Model API retry ${attempt} in ${(waitMs / 1000).toFixed(1)}s` });
+          emit({ t: "run", msg: `Anthropic retry ${attempt} in ${(waitMs / 1000).toFixed(1)}s` });
 
         try {
           emit({ t: "init", startedAt, model: CONFIG.model, task });
@@ -70,8 +292,29 @@ export async function POST(request: Request): Promise<Response> {
             emit({ t: "need_url" });
             return;
           }
-          client = getHyperbrowser();
-          const hyperbrowser = client;
+
+          const domain = domainKeyOf(targetUrl);
+          if (!domain) throw new Error("Could not resolve the target domain.");
+
+          const client = getHyperbrowser();
+          const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+          if (!anthropicApiKey) throw new Error("Missing ANTHROPIC_API_KEY.");
+
+          emit({ t: "phase", phase: "remembering", at: Date.now() });
+          const loaded = await loadMemory(domain);
+          const prior = hasMemory(loaded) ? structuredClone(loaded) : null;
+          const store = loaded ?? emptyMemory(domain);
+          const memoryHit = hasMemory(loaded);
+          emit({
+            t: "memory",
+            snapshot: {
+              domain,
+              hit: memoryHit,
+              ...statsOf(store),
+              graph: graphDataOf(store),
+            },
+            missReason: memoryHit ? null : "no_memory_file",
+          });
 
           const plan = await callJson<{ allowed: boolean; reason: string; plan: string }>(
             buildPlannerMessages(task, targetUrl),
@@ -84,124 +327,167 @@ export async function POST(request: Request): Promise<Response> {
           }
           emit({ t: "plan", url: targetUrl, note: plan.plan });
 
-          emit({ t: "phase", phase: "inspecting", at: Date.now() });
-          inspector = await openInspector(hyperbrowser);
-          emit({ t: "live", url: inspector.liveUrl, label: "Inspection session" });
-          emit({ t: "inspect", msg: "Navigating to the real entry page" });
-          const firstCapture = await inspector.capture(targetUrl);
-          await inspector.screenshot();
-          emit({
-            t: "inspect",
-            msg: "Captured page structure and screenshot",
-            elements: firstCapture.clickables.length + firstCapture.inputs.length,
-            links: firstCapture.links.length,
-            forms: firstCapture.forms.length,
-            chars: firstCapture.textOutline.length,
-          });
+          const totalWrites = emptyCounts();
+          const observed: ObservedState = {
+            selectors: new Set(),
+            navPaths: new Set(),
+            flows: new Set(),
+            notes: new Set(),
+            repairs: new Set(),
+            envFacts: new Set(),
+          };
+          const reuse: ReuseState = {
+            selectors: new Set(),
+            navPaths: new Set(),
+            flows: new Set(),
+            repairs: new Map(),
+            staleSelectors: new Set(),
+          };
 
-          const captures = [firstCapture];
-          const nav = await callJson<{ navigate: string | null }>(
-            buildNavRequestMessages(task, firstCapture, CONFIG.perCaptureCharCap),
-            meter,
-            retryNotice
-          );
-          if (nav.navigate && firstCapture.links.some((link) => link.href === nav.navigate)) {
-            emit({ t: "inspect", msg: "Inspecting one linked page requested by Claude" });
-            captures.push(await inspector.capture(nav.navigate));
-            await inspector.screenshot();
-          }
-
-          emit({ t: "phase", phase: "writing", at: Date.now() });
-          const generatorMessages = buildGeneratorMessages(
-            task,
-            targetUrl,
-            captures,
-            CONFIG.perCaptureCharCap,
-            taskNeedsLogin(task)
-          );
-          let generated = await streamScript(generatorMessages, meter, emit, retryNotice);
-          emit({ t: "script_done", script: generated.script, phase: "writing" });
-          await inspector.close();
-          inspector = null;
-
-          sandbox = await provisionSandbox(hyperbrowser);
-
-          const execute = async (script: string) => {
-            const session = await hyperbrowser.sessions.create({
-              viewOnlyLiveView: true,
-              acceptCookies: true,
-              timeoutMinutes: 2,
-            });
-            executionSessionId = session.id;
-            emit({ t: "live", url: session.liveUrl ?? null, label: "Execution session" });
-            const outcome = await runScript(
-              sandbox!,
-              script,
-              {
-                targetUrl,
-                cdpUrl: session.wsEndpoint,
-                shotPath: SANDBOX_PATHS.screenshotFile,
-                username: input.username,
-                password: input.password,
-              },
-              emit
-            );
-            return { outcome, session };
+          const extractDelta = async (
+            evidence: string,
+            terminal: boolean,
+            finalResult?: string
+          ) => {
+            if (!evidence.trim() && !finalResult?.trim()) return;
+            try {
+              emit({ t: "phase", phase: "learning", at: Date.now() });
+              const delta = await callJson<MemoryDelta>(
+                buildMemoryDeltaMessages({
+                  task,
+                  targetUrl,
+                  memory: prior,
+                  evidence,
+                  finalResult,
+                  terminal,
+                }),
+                meter,
+                retryNotice
+              );
+              const learned = applyMemoryDelta(store, delta, targetUrl, Date.now(), observed);
+              addCounts(totalWrites, learned.counts);
+              applyMeasuredReuse(store, prior, delta, reuse);
+              const memoryStats = statsOf(store);
+              emit({
+                t: "memory_learned",
+                graph: graphDataOf(store),
+                selectors: memoryStats.selectors,
+                navPaths: memoryStats.navPaths,
+                flows: memoryStats.flows,
+                repairs: memoryStats.repairs,
+                envFacts: memoryStats.envFacts,
+                labels: learned.labels,
+                stale: [...reuse.staleSelectors],
+              });
+              const reusedEntries = [
+                ...reuse.selectors,
+                ...reuse.navPaths,
+                ...reuse.flows,
+              ];
+              if (reusedEntries.length) {
+                emit({ t: "memory_reuse", entries: reusedEntries });
+              }
+              for (const repair of reuse.repairs.values()) {
+                emit({ t: "memory_repair_applied", error: repair.error, fix: repair.fix });
+              }
+            } catch (error) {
+              emit({ t: "run", msg: `Memory extraction skipped: ${messageOf(error)}` });
+            } finally {
+              emit({ t: "phase", phase: "running", at: Date.now() });
+            }
           };
 
           emit({ t: "phase", phase: "running", at: Date.now() });
-          emit({ t: "run", msg: "Running generated code in an isolated sandbox" });
-          let execution = await execute(generated.script);
-          let repaired = false;
-
-          if (!execution.outcome.ok) {
-            repaired = true;
-            emit({ t: "phase", phase: "repairing", at: Date.now() });
-            emit({ t: "repair", attempt: 1, reason: execution.outcome.error ?? "No result returned" });
-            const freshCapture = await captureCurrentSession(execution.session.wsEndpoint).catch(
-              () => captures[captures.length - 1]
-            );
-            await hyperbrowser.sessions.stop(execution.session.id).catch(() => undefined);
-            executionSessionId = null;
-
-            const repairMessages = buildRepairMessages(
-              generatorMessages,
-              generated.rawContent,
-              execution.outcome.error ?? "",
-              execution.outcome.result.stdout,
-              freshCapture,
-              CONFIG.perCaptureCharCap
-            );
-            generated = await streamScript(repairMessages, meter, emit, retryNotice);
-            emit({ t: "script_done", script: generated.script, phase: "repairing" });
-            emit({ t: "phase", phase: "running", at: Date.now() });
-            execution = await execute(generated.script);
-          }
-
-          emit({ t: "result", result: execution.outcome.result, repaired });
-          emit({ t: "usage", usage: meter.snapshot() });
-          emit({
-            t: "done",
-            elapsedMs: Date.now() - startedAt,
-            repaired,
-            ok: execution.outcome.ok,
+          const outcome = await runComputerUse(client, {
+            task: buildComputerUseTask(task, targetUrl, prior),
+            anthropicApiKey,
+            emit,
+            isCancelled: () => closed,
+            onNewSteps: async (steps) => {
+              await extractDelta(computerUseEvidence(steps), false);
+            },
           });
-          if (!execution.outcome.ok) {
-            emit({ t: "error", message: execution.outcome.error ?? "The repaired script failed." });
+
+          meter.addCounts(outcome.inputTokens, outcome.outputTokens);
+          await extractDelta(
+            computerUseEvidence(outcome.steps),
+            true,
+            outcome.finalResult
+          );
+
+          const elapsedMs = Date.now() - startedAt;
+          const usage = meter.snapshot();
+          const first = firstRecordedRun(store);
+          const record = {
+            at: Date.now(),
+            task,
+            ok: outcome.ok,
+            steps: outcome.steps.length,
+            elapsedMs,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            repaired: false,
+            memoryUsed: memoryHit,
+            selectorsReused:
+              reuse.selectors.size + reuse.navPaths.size + reuse.flows.size + reuse.repairs.size,
+          };
+          recordRun(store, record);
+
+          const saved = await saveMemory(store);
+          if (saved) {
+            emit({
+              t: "memory_write",
+              ...totalWrites,
+              graph: graphDataOf(store),
+              bytes: saved.bytes,
+              pruned: saved.pruned,
+              created: !loaded,
+            });
           }
+          if (first) {
+            emit({
+              t: "memory_comparison",
+              comparison: {
+                first: {
+                  at: first.at,
+                  steps: first.steps,
+                  elapsedMs: first.elapsedMs,
+                  inputTokens: first.inputTokens,
+                  outputTokens: first.outputTokens,
+                },
+                current: {
+                  steps: record.steps,
+                  elapsedMs: record.elapsedMs,
+                  inputTokens: record.inputTokens,
+                  outputTokens: record.outputTokens,
+                },
+              },
+            });
+          }
+
+          emit({
+            t: "result",
+            result: {
+              data: parseAgentResult(outcome.finalResult),
+              steps: outcome.stepLabels,
+            },
+          });
+          emit({ t: "usage", usage });
+          emit({ t: "done", elapsedMs, ok: outcome.ok });
+          if (!outcome.ok) emit({ t: "error", message: outcome.error ?? "Agent run failed." });
         } catch (error) {
           emit({ t: "usage", usage: meter.snapshot() });
           emit({ t: "error", message: messageOf(error) });
         } finally {
-          if (inspector) await inspector.close().catch(() => undefined);
-          if (executionSessionId && client) {
-            await client.sessions.stop(executionSessionId).catch(() => undefined);
+          if (!closed) {
+            closed = true;
+            controller.close();
           }
-          await stopSandbox(sandbox);
-          closed = true;
-          controller.close();
         }
       })();
+    },
+    cancel() {
+      closed = true;
     },
   });
 

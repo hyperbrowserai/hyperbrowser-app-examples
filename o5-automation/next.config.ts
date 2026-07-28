@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // The SDK + playwright-core are server-only; keep them external so Next
-  // doesn't try to bundle their native/optional deps into route handlers.
-  serverExternalPackages: ["@hyperbrowser/sdk", "playwright-core"],
+  // Keep the server-only SDK external so Next does not bundle optional deps.
+  serverExternalPackages: ["@hyperbrowser/sdk"],
 };
 
 export default nextConfig;

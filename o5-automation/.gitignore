@@ -26,6 +26,9 @@ yarn-debug.log*
 .env*
 !.env.example
 
+# per-site navigation memory (local, run-derived)
+.memory/
+
 # vercel
 .vercel
 

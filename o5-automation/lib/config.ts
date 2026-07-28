@@ -16,27 +16,23 @@ export const CONFIG = {
   modelInputPricePerM: 5,
   modelOutputPricePerM: 25,
   jsonMaxTokens: 1_024,
-  scriptMaxTokens: 8_192,
 
-  /** Hard cap on generated-script execution (spec: 90s). */
-  runTimeoutMs: intEnv("RUN_TIMEOUT_SECONDS", 90) * 1000,
-  /** Sandbox image with node + chromium + playwright-core preinstalled. */
-  sandboxImage: process.env.SANDBOX_IMAGE || "node-chromium",
+  /** Claude Computer Use runtime, verified against @hyperbrowser/sdk types. */
+  computerUseMaxSteps: intEnv("COMPUTER_USE_MAX_STEPS", 20),
+  computerUseMaxFailures: intEnv("COMPUTER_USE_MAX_FAILURES", 3),
+  computerUsePollMs: intEnv("COMPUTER_USE_POLL_MS", 2_000),
+  computerUseMaxPollFailures: intEnv("COMPUTER_USE_MAX_POLL_FAILURES", 5),
+  computerUseTimeoutMinutes: intEnv("COMPUTER_USE_TIMEOUT_MINUTES", 5),
 
-  /** Timeouts for the inspection browser we drive ourselves. */
-  inspectNavTimeoutMs: intEnv("INSPECT_NAV_TIMEOUT_MS", 30_000),
-  /** How long to wait for the sandbox to have deps ready. */
-  sandboxSetupTimeoutMs: intEnv("SANDBOX_SETUP_TIMEOUT_MS", 60_000),
-
-  /** Send generous page structure while bounding pathological pages. */
-  perCaptureCharCap: intEnv("PER_CAPTURE_CHAR_CAP", 120_000),
-} as const;
-
-/** Where inside the sandbox the generated script + its deps live. */
-export const SANDBOX_PATHS = {
-  workDir: "/home/ubuntu/run",
-  scriptFile: "/home/ubuntu/run/automation.ts",
-  screenshotFile: "/home/ubuntu/run/final.png",
-  /** playwright-core ships preinstalled here on the node-chromium image. */
-  playwrightNodePath: "/usr/local/lib/hb-playwright/node_modules",
+  /** Per-site navigation memory, stored as one JSON file per domain. */
+  /** Hard cap per domain file. Past this we prune unreused entries. */
+  memoryMaxBytes: intEnv("MEMORY_MAX_BYTES", 64_000),
+  /** Per-category entry caps, applied before the byte cap. */
+  memoryMaxSelectors: intEnv("MEMORY_MAX_SELECTORS", 60),
+  memoryMaxNavPaths: intEnv("MEMORY_MAX_NAV_PATHS", 12),
+  memoryMaxFlows: intEnv("MEMORY_MAX_FLOWS", 20),
+  memoryMaxNotes: intEnv("MEMORY_MAX_NOTES", 8),
+  memoryMaxEnvFacts: intEnv("MEMORY_MAX_ENV_FACTS", 12),
+  /** Runs kept for the first-vs-repeat comparison (the first is always kept). */
+  memoryMaxRunHistory: intEnv("MEMORY_MAX_RUN_HISTORY", 20),
 } as const;

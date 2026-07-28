@@ -7,8 +7,8 @@ const body = DM_Sans({ subsets: ["latin"], variable: "--font-body" });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "Automation Foundry — Hyperbrowser × Claude Opus 5",
-  description: "Turn a plain-language web task into a tested browser automation.",
+  title: "Browser Agent Navigation Memory — Hyperbrowser",
+  description: "Portable navigation memory for browser agents.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
