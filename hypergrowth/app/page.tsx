@@ -1,0 +1,384 @@
+"use client";
+
+import type { ComponentType, FormEvent } from "react";
+import { useRef, useState } from "react";
+import {
+  Bot,
+  Loader2,
+  Minus,
+  Plus,
+  Radar,
+  Search,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import { ResultsDashboard } from "@/components/ResultsDashboard";
+import { SourceIcon } from "@/components/SourceIcon";
+import { SourceSelector } from "@/components/SourceSelector";
+import { buildDemoResult } from "@/lib/demo-data";
+import { streamMineRun } from "@/lib/client/run-stream";
+import type { MineRunEvent } from "@/lib/run-events";
+import type { AnalysisMode, MineRequest, MineResult, SignalSource } from "@/lib/types";
+
+const analysisModes: Array<{
+  id: AnalysisMode;
+  label: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
+}> = [
+  { id: "deterministic", label: "Deterministic", icon: ShieldCheck },
+  { id: "full", label: "Full", icon: Sparkles },
+];
+
+const maxResultOptions = [3, 6, 12, 24, 30] as const;
+
+const defaultRedditTargets = "";
+
+export default function Home() {
+  const [query, setQuery] = useState(
+    "Playwright Cloudflare browser automation fails in production"
+  );
+  const [sources, setSources] = useState<SignalSource[]>([
+    "hackernews",
+    "github",
+  ]);
+  const [includeBroadWeb, setIncludeBroadWeb] = useState(true);
+  const [redditTargets, setRedditTargets] = useState(defaultRedditTargets);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("full");
+  const [maxResults, setMaxResults] = useState(6);
+  const [result, setResult] = useState<MineResult>(() =>
+    buildDemoResult(
+      "Playwright Cloudflare browser automation fails in production",
+      "full"
+    )
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [runEvents, setRunEvents] = useState<MineRunEvent[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const subredditValidation = validateSubreddits(redditTargets);
+  const canSubmit = !isLoading && subredditValidation.invalid.length === 0;
+
+  function cycleMaxResults(direction: 1 | -1) {
+    const currentIndex = maxResultOptions.indexOf(
+      maxResults as (typeof maxResultOptions)[number]
+    );
+    const nextIndex = Math.max(
+      0,
+      Math.min(maxResultOptions.length - 1, currentIndex + direction)
+    );
+    setMaxResults(maxResultOptions[nextIndex]);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsLoading(true);
+    setError("");
+    setRunEvents([]);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const mineRequest: MineRequest = {
+      query,
+      sources,
+      maxResults,
+      analysisMode,
+      openWebTargets: {
+        includeBroadWeb,
+        redditSubreddits: subredditValidation.valid,
+      },
+    };
+
+    try {
+      await streamMineRun({
+        request: mineRequest,
+        signal: controller.signal,
+        onEvent: (runEvent) => {
+          setRunEvents((events) => [...events, runEvent]);
+
+          if (runEvent.type === "run_completed") {
+            setResult(runEvent.result);
+          }
+
+          if (runEvent.type === "run_failed") {
+            setError(runEvent.message);
+          }
+        },
+      });
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        setError("Run cancelled. Partial trace is preserved below.");
+        return;
+      }
+
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to mine growth signals."
+      );
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
+  }
+
+  function cancelRun() {
+    abortRef.current?.abort();
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
+      <main className="relative z-10 mx-auto flex w-full max-w-[1480px] flex-col gap-3 px-3 py-3 sm:px-5 lg:px-6">
+        {/* Command Bar */}
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-lg border border-line bg-panel/80 shadow-[0_16px_64px_rgba(0,0,0,0.32)] backdrop-blur-xl"
+        >
+          {/* Row 1: Branding, query, discovery, and enrichment */}
+          <div className="flex flex-col gap-4 border-b border-line/60 px-4 py-3 min-[1120px]:flex-row min-[1120px]:flex-wrap min-[1120px]:items-center">
+            {/* Branding */}
+            <div className="flex shrink-0 items-center gap-2.5">
+              <span className="grid size-9 place-items-center rounded-lg border border-accent/40 bg-accent/12 text-accent shadow-[0_0_24px_rgba(124,255,178,0.15)]">
+                <Radar size={18} />
+              </span>
+              <div>
+                <h1 className="text-lg font-black tracking-tight">
+                  HyperGrowth
+                </h1>
+                <p className="text-xs leading-snug text-muted">
+                  Developer Growth Intelligence
+                </p>
+              </div>
+            </div>
+
+            <div className="mx-2 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
+
+            {/* Query */}
+            <label className="block min-w-0 flex-1 min-[1120px]:basis-[340px]">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
+                Query
+              </span>
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
+                />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="h-11 w-full rounded-md border border-line bg-black/30 pl-9 pr-3 text-sm text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60 focus:bg-black/40"
+                  placeholder="e.g. browser automation blocked by captchas"
+                />
+              </div>
+            </label>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
+
+            {/* Discovery Engine */}
+            <div className="shrink-0">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
+                Discovery
+              </span>
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-source-web/50 bg-source-web/12 px-3 text-sm font-semibold text-source-web">
+                <span className="grid size-5 place-items-center rounded bg-white/[0.04]">
+                  <SourceIcon source="hyperbrowser" size={14} />
+                </span>
+                Hyperbrowser
+                <span className="rounded-full border border-source-web/30 px-1.5 py-0.5 text-xs uppercase tracking-wide text-source-web/80">
+                  Search + Fetch
+                </span>
+              </div>
+            </div>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
+
+            {/* Enrichment Sources */}
+            <div className="min-w-0 min-[1120px]:flex-[1_1_280px]">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
+                Enrichment
+              </span>
+              <SourceSelector value={sources} onChange={setSources} />
+            </div>
+          </div>
+
+          {/* Row 2: Hyperbrowser targets, analysis mode, max results, submit */}
+          <div className="flex flex-col gap-4 px-4 py-3 min-[1120px]:flex-row min-[1120px]:flex-wrap min-[1120px]:items-end">
+            {/* Open-web targets steer Hyperbrowser discovery. */}
+            <div className="flex min-w-0 flex-1 flex-col gap-3 md:flex-row md:items-end min-[1120px]:basis-[420px]">
+              <label className="block min-w-0 flex-1 min-[1120px]:basis-[260px]">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
+                  Optional Web Targets
+                </span>
+                <input
+                  value={redditTargets}
+                  onChange={(event) => setRedditTargets(event.target.value)}
+                  className="h-11 w-full rounded-md border border-line bg-black/30 px-3 text-sm text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent/60"
+                  placeholder="stackoverflow, browser docs, r/webscraping"
+                />
+              </label>
+
+              <label className="inline-flex h-11 shrink-0 items-center gap-2 rounded-md border border-line bg-black/20 px-3 text-xs font-semibold text-muted transition hover:border-accent/30">
+                <input
+                  type="checkbox"
+                  checked={includeBroadWeb}
+                  onChange={(event) =>
+                    setIncludeBroadWeb(event.target.checked)
+                  }
+                  className="size-3.5 accent-[var(--accent)]"
+                />
+                Broad web
+              </label>
+            </div>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
+
+            {/* Analysis Mode */}
+            <div className="shrink-0">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
+                Analysis Mode
+              </span>
+              <div className="flex h-11 overflow-hidden rounded-md border border-line">
+                {analysisModes.map((mode) => {
+                  const selected = analysisMode === mode.id;
+                  const ModeIcon = mode.icon;
+
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setAnalysisMode(mode.id)}
+                      className={`flex items-center gap-1.5 px-3 text-sm font-semibold transition ${
+                        selected
+                          ? "bg-accent/15 text-accent shadow-[inset_0_0_12px_rgba(124,255,178,0.08)]"
+                          : "bg-black/20 text-muted hover:bg-white/[0.04] hover:text-foreground"
+                      } ${mode.id !== "deterministic" ? "border-l border-line" : ""}`}
+                    >
+                      <ModeIcon size={12} />
+                      <span className="hidden sm:inline">{mode.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
+
+            {/* Max Results */}
+            <div className="shrink-0">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">
+                Max Results
+              </span>
+              <div className="flex h-11 items-center rounded-md border border-line bg-black/20">
+                <button
+                  type="button"
+                  onClick={() => cycleMaxResults(-1)}
+                  className="grid size-11 place-items-center text-muted transition hover:text-foreground"
+                >
+                  <Minus size={14} />
+                </button>
+                <span className="min-w-[2.5rem] text-center text-sm font-bold text-foreground">
+                  {maxResults}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => cycleMaxResults(1)}
+                  className="grid size-11 place-items-center text-muted transition hover:text-foreground"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="mx-1 hidden h-8 w-px bg-line/60 min-[1360px]:block" />
+
+            {/* Submit */}
+            <button
+              type={isLoading ? "button" : "submit"}
+              onClick={isLoading ? cancelRun : undefined}
+              disabled={!isLoading && !canSubmit}
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-accent/50 bg-accent px-5 text-sm font-black text-background shadow-[0_0_24px_rgba(124,255,178,0.18)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLoading ? (
+                <Loader2 className="animate-spin" size={15} />
+              ) : (
+                <Bot size={15} />
+              )}
+              {isLoading ? "Cancel Run" : "Run Analysis"}
+            </button>
+          </div>
+
+          {subredditValidation.valid.length > 0 ||
+          subredditValidation.invalid.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 border-t border-line/50 px-4 py-2">
+              {subredditValidation.valid.map((subreddit) => (
+                <span
+                  key={subreddit}
+                  className="rounded-full border border-source-web/25 bg-source-web/10 px-2 py-0.5 text-xs font-semibold text-source-web"
+                >
+                  r/{subreddit}
+                </span>
+              ))}
+              {subredditValidation.invalid.map((subreddit) => (
+                <span
+                  key={subreddit}
+                  className="rounded-full border border-danger/30 bg-danger/10 px-2 py-0.5 text-xs font-semibold text-danger"
+                >
+                  invalid: {subreddit}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="border-t border-danger/20 px-4 py-2">
+              <p className="text-[12px] text-danger">{error}</p>
+            </div>
+          ) : null}
+        </form>
+
+        {/* Results */}
+        <ResultsDashboard
+          result={result}
+          isLoading={isLoading}
+          activeRun={{
+            query,
+            sources: ["hyperbrowser", ...sources],
+            analysisMode,
+            maxResults,
+            includeBroadWeb,
+            redditTargets: subredditValidation.valid,
+          }}
+          runEvents={runEvents}
+        />
+      </main>
+    </div>
+  );
+}
+
+function parseSubreddits(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim().replace(/^r\//i, ""))
+        .filter(Boolean)
+    )
+  ).slice(0, 8);
+}
+
+function validateSubreddits(value: string): {
+  valid: string[];
+  invalid: string[];
+} {
+  const entries = parseSubreddits(value);
+  return entries.reduce(
+    (acc, subreddit) => {
+      if (/^[A-Za-z0-9_]{2,24}$/.test(subreddit)) {
+        acc.valid.push(subreddit);
+      } else {
+        acc.invalid.push(subreddit);
+      }
+
+      return acc;
+    },
+    { valid: [] as string[], invalid: [] as string[] }
+  );
+}
