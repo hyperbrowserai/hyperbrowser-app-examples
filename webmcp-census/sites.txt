@@ -1,0 +1,75 @@
+# WebMCP Census seed list. One URL per line; blank lines and # comments are ignored.
+# Edit freely, or pass your own file with `npm run census -- --sites my-sites.txt`.
+
+# --- Popular public sites ---
+https://www.google.com
+https://www.youtube.com
+https://www.wikipedia.org
+https://www.amazon.com
+https://www.reddit.com
+https://github.com
+https://stackoverflow.com
+https://www.linkedin.com
+https://www.microsoft.com
+https://www.apple.com
+https://www.netflix.com
+https://www.bing.com
+https://duckduckgo.com
+https://www.nytimes.com
+https://www.bbc.com
+https://www.cnn.com
+https://www.theguardian.com
+https://www.espn.com
+https://www.imdb.com
+https://www.booking.com
+https://www.airbnb.com
+https://www.expedia.com
+https://www.ebay.com
+https://www.etsy.com
+https://www.walmart.com
+https://www.target.com
+https://www.shopify.com
+https://stripe.com
+https://www.paypal.com
+https://www.spotify.com
+https://www.twitch.tv
+https://www.pinterest.com
+https://www.yelp.com
+https://www.zillow.com
+https://www.craigslist.org
+https://news.ycombinator.com
+https://developer.mozilla.org
+https://www.cloudflare.com
+https://vercel.com
+https://www.notion.com
+https://www.figma.com
+https://openai.com
+https://www.anthropic.com
+https://huggingface.co
+https://hyperbrowser.ai
+
+# --- Pages publicly referenced as exposing WebMCP tools ---
+# Sources: GoogleChromeLabs/webmcp-tools demos and webmachinelearning/awesome-webmcp.
+# Listing in these directories is a claim by a third party, not a guarantee.
+https://googlechromelabs.github.io/webmcp-tools/demos/explainer/
+https://googlechromelabs.github.io/webmcp-tools/demos/react-flightsearch/
+https://googlechromelabs.github.io/webmcp-tools/demos/french-bistro/
+https://googlechromelabs.github.io/webmcp-tools/demos/pizza-maker/
+https://tinypdf.in/webmcp.html
+https://lab.kudithipudi.org/webmcp-demo/
+https://windowai.danduh.me/webmcp
+https://mcp.clideck.com/demo
+https://isainative.dev/
+https://faf.one/webmcp
+https://settledestate.com/webmcp/
+https://naczarter.pl/en/developers/webmcp
+https://scholar-sidekick.com/integrations/webmcp
+https://agent-ready.dev/
+https://simpletoolstack.com/
+https://sitepassport.org/
+https://admintoolkit.io/
+https://webconverter.app/webmcp.html
+https://intlayer.org/
+https://chriswijnia.com/lab/emoji
+https://parity-webmcp.vercel.app/
+https://mgifford.github.io/wsg-webmcp-experiment/
