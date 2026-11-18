@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# Join this agent VM to the tailnet as an ephemeral node tagged tag:agents.
+#
+# Preferred: workload identity federation. The platform mints a short-lived
+# OIDC token, Tailscale exchanges it for a one-off auth key, and nothing
+# long-lived is stored on the VM. Needs TS_CLIENT_ID_<PLATFORM> and
+# TS_AUDIENCE_<PLATFORM> (.agents/load-env.sh).
+# Fallback: a Tailscale OAuth client secret (does not expire) provided as the
+# TS_OAUTH_CLIENT_SECRET platform secret.
+#
+# Idempotent: exits early when the node is already connected. Never run it
+# during a snapshot build; each session must register its own node. Every
+# step is time-bounded so a stalled token or control-plane request cannot
+# hold up the caller.
+#
+#   agent-tailscale-up               join once
+#   agent-tailscale-up --watch       join, then keep the VM on the tailnet:
+#                                    join again whenever the node drops off
+#   agent-tailscale-up --background  start --watch detached and return at once
+#                                    (log: /tmp/agent-tailscale-up.log)
+# Cursor's start.sh and Devin's SessionStart hook (.devin/hooks.v1.json) run
+# --background. Only one watcher runs per VM.
+set -euo pipefail
+
+self="$(readlink -f "${BASH_SOURCE[0]}")"
+here="$(dirname "$self")"
+log=/tmp/agent-tailscale-up.log
+
+if [ "${1:-}" = --background ]; then
+  setsid nohup "$self" --watch >>"$log" 2>&1 </dev/null &
+  echo "agent-tailscale-up: keeping the tailnet connection up in the background (log: $log)"
+  exit 0
+fi
+. "$here/../load-env.sh"
+platform="$("$here/agent-platform")"
+# Cursor's token socket can appear a moment after boot.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ "$platform" != unknown ] && break
+  sleep 1
+  platform="$("$here/agent-platform")"
+done
+
+case "$platform" in
+  cursor) client_id="$TS_CLIENT_ID_CURSOR"; audience="$TS_AUDIENCE_CURSOR" ;;
+  devin)  client_id="$TS_CLIENT_ID_DEVIN";  audience="$TS_AUDIENCE_DEVIN" ;;
+  *)      client_id=""; audience="" ;;
+esac
+
+if [ -z "$client_id" ] && [ -z "${TS_OAUTH_CLIENT_SECRET:-}" ]; then
+  echo "agent-tailscale-up: no Tailscale credential configured for platform '$platform'; skipping"
+  exit 0
+fi
+
+sock=/run/tailscale/tailscaled.sock
+ts() { sudo timeout 20 tailscale --socket="$sock" "$@"; }
+ts_up() { sudo timeout 75 tailscale --socket="$sock" up --timeout=60s "$@"; }
+# tailscaled keeps reporting Running after the control server has deleted the
+# node, so a node also has to be online (in contact with the control server).
+ts_state() {
+  ts status --json 2>/dev/null |
+    jq -r 'if .BackendState == "Running" and (.Self.Online | not) then "Offline" else .BackendState // empty end' 2>/dev/null || true
+}
+# True when a peer answers a Tailscale-level ping, directly or through a relay.
+# Peers with an active connection are tried first. Peers drop a node that the
+# control server has deleted, so none answer then.
+ts_peer_reachable() {
+  local ip
+  for ip in $(ts status --json 2>/dev/null | jq -r '[.Peer[]? | select(.TailscaleIPs[0])] | sort_by(.Active | not) | .[:10][] | .TailscaleIPs[0]' 2>/dev/null); do
+    if ts ping --c 1 --until-direct=false --timeout 3s "$ip" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if [ "${1:-}" = --watch ]; then
+  # Tailscale deletes an ephemeral node that stays offline for a while, as
+  # when the VM sleeps; tailscaled then waits for a new login. Check every 30s
+  # and join again (a fresh token and node) when the node is not running.
+  # "Starting" and "Offline" (running, but out of contact with the control
+  # server) are given 5 minutes before they count as down, "Offline" does not
+  # count as down while a peer still answers, and failed joins back off up to
+  # 10 minutes.
+  exec 9>>/tmp/agent-tailscale-watch.lock
+  if ! flock -n 9; then
+    echo "agent-tailscale-up: already watching"
+    exit 0
+  fi
+  delay=30 starting=0
+  while :; do
+    state="$(ts_state)"
+    if [ "$state" = Running ]; then
+      delay=30 starting=0
+    elif { [ "$state" = Starting ] || [ "$state" = Offline ]; } && [ "$starting" -lt 10 ]; then
+      starting=$((starting + 1))
+      sleep 30
+      continue
+    elif [ "$state" = Offline ] && ts_peer_reachable; then
+      # Peers still answer, so this is a control server outage rather than a
+      # deleted node. A new login would drop those working connections.
+      sleep 30
+      continue
+    else
+      echo "agent-tailscale-up: $(date -u +%FT%TZ) node is ${state:-not running}; joining"
+      if timeout 150 "$self" 9>&-; then
+        delay=30 starting=0
+      else
+        delay=$(( delay * 2 > 600 ? 600 : delay * 2 ))
+        echo "agent-tailscale-up: join failed; next try in ${delay}s"
+      fi
+    fi
+    sleep "$delay"
+  done
+fi
+
+if [ "$(ts_state)" = Running ]; then
+  echo "agent-tailscale-up: already connected"
+  exit 0
+fi
+
+if ! ts status --json >/dev/null 2>&1; then
+  # Cursor VMs have no usable TUN device, so run in userspace mode and expose
+  # SOCKS5/HTTP proxies (see .agents/README.md). Elsewhere use kernel TUN.
+  args=(--state=mem: --socket="$sock")
+  if [ "$platform" = cursor ] || [ ! -c /dev/net/tun ]; then
+    args+=(--tun=userspace-networking --socks5-server=localhost:1055 --outbound-http-proxy-listen=localhost:1054)
+  fi
+  sudo mkdir -p /run/tailscale
+  sudo sh -c 'nohup tailscaled "$@" >/var/log/agent-tailscaled.log 2>&1 &' tailscaled "${args[@]}"
+  for _ in $(seq 1 30); do
+    ts status --json >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
+
+hostname="agent-${platform}-$(hostname -s | tr -c 'a-zA-Z0-9-\n' '-' | cut -c1-40)"
+# --force-reauth registers a new node even when tailscaled still holds the
+# login of a deleted one.
+up=(--hostname="$hostname" --advertise-tags="$TS_TAGS" --accept-routes --reset --force-reauth)
+# Pass the token or secret through an owner-only tmpfs file, never on the
+# command line, where sudo logs it. root (sudo) can read the 0600 file, and it
+# stays ours so the trap can delete it.
+keyfile="$(mktemp -p /dev/shm)"
+trap 'rm -f "$keyfile"' EXIT
+if [ -n "$client_id" ]; then
+  token="$("$here/agent-oidc-token" "$audience")"
+  printf '%s' "$token" >"$keyfile"
+  unset token
+  ts_up "${up[@]}" --client-id="${client_id}?ephemeral=true&preauthorized=true" --id-token="file:$keyfile"
+else
+  printf '%s?ephemeral=true&preauthorized=true' "$TS_OAUTH_CLIENT_SECRET" >"$keyfile"
+  ts_up "${up[@]}" --auth-key="file:$keyfile"
+fi
+ts status --peers=false

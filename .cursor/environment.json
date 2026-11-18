@@ -1,0 +1,4 @@
+{
+  "install": "bash .agents/bin/agent-access install",
+  "start": "bash .agents/bin/agent-access start"
+}

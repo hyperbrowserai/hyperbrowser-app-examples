@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Print a short-lived OIDC JWT for the given audience, minted by the coding
+# agent platform this VM belongs to (Cursor Cloud Agent or Devin).
+#   Cursor: local socket, sub = team_id:<team>, 5 minute lifetime.
+#   Devin:  devin-oidc (installed by the setup-*-oidc actions), sub = org_id:<org>.
+set -euo pipefail
+
+aud="${1:?usage: agent-oidc-token <audience>}"
+sock="${CURSOR_AGENT_SOCKET:-/run/cursor/api.sock}"
+
+if [ -e "$sock" ] || [ -n "${CURSOR_AGENT_SOCKET:-}" ]; then
+  body=$(jq -cn --arg aud "$aud" '{aud: $aud, sub_claim: "team_id"}')
+  # The socket can be missing for a moment right after boot. Each attempt is
+  # bounded, so callers (the gcloud executable source allows 30s) never hang.
+  for _ in 1 2 3 4; do
+    if [ -S "$sock" ] && out=$(curl -fsS --connect-timeout 2 --max-time 5 \
+        --unix-socket "$sock" -H 'Content-Type: application/json' -d "$body" \
+        http://cursor-agent/v1/tokens/oidc); then
+      jq -er .token <<<"$out"
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "agent-oidc-token: Cursor token socket $sock did not answer" >&2
+  exit 1
+fi
+
+if command -v devin-oidc >/dev/null 2>&1; then
+  exec timeout 25 devin-oidc token --audience "$aud" --subject-keys org_id
+fi
+
+echo "agent-oidc-token: neither a Cursor token socket nor devin-oidc is available" >&2
+exit 1

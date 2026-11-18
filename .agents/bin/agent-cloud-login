@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Point gcloud, the Google client libraries and the AWS CLI/SDKs at the
+# keyless helpers above. Writes only configuration (resource names and helper
+# paths), never credentials. Used on Cursor; Devin gets the same result from
+# the CognitionAI setup-gcp-oidc and setup-aws-oidc blueprint actions.
+#
+# Everything it writes is its own: a gcloud configuration and an AWS profile
+# named coding-agents, ~/.config/gcloud/agent-wif.json, and the Google
+# application default credentials file only when none exists or it is ours.
+# Other configurations, profiles and credentials are left alone. GCP and AWS
+# are handled independently, and an empty setting in agent-env.conf removes
+# what an earlier run set up. Safe to run again; it never needs the network.
+set -uo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+. "$here/../load-env.sh"
+platform="$("$here/agent-platform")"
+
+name=coding-agents
+gdir="$HOME/.config/gcloud"
+wif="$gdir/agent-wif.json"
+adc="$gdir/application_default_credentials.json"
+aws_cfg="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+export GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES=1
+
+# True when the ADC file was written by this helper.
+adc_is_ours() { [ -f "$adc" ] && jq -e --arg cmd "$here/agent-gcp-token" \
+  '.credential_source.executable.command == $cmd' "$adc" >/dev/null 2>&1; }
+
+setup_gcp() {
+  mkdir -p "$gdir" || return 1
+  jq -n \
+    --arg aud "//iam.googleapis.com/${GCP_WIF_POOL}/providers/${platform}" \
+    --arg sa "$GCP_SERVICE_ACCOUNT" \
+    --arg cmd "$here/agent-gcp-token" \
+    '{
+      type: "external_account",
+      audience: $aud,
+      subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+      token_url: "https://sts.googleapis.com/v1/token",
+      service_account_impersonation_url: ("https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/" + $sa + ":generateAccessToken"),
+      credential_source: {executable: {command: $cmd, timeout_millis: 30000}}
+    }' >"$wif" || return 1
+  if [ ! -e "$adc" ] || adc_is_ours; then
+    cp "$wif" "$adc" || return 1
+  else
+    echo "agent-cloud-login: keeping the existing $adc; set GOOGLE_APPLICATION_CREDENTIALS=$wif to use the agent identity" >&2
+  fi
+
+  local active
+  active="$(gcloud config configurations list --filter=is_active:true --format='value(name)' 2>/dev/null)"
+  gcloud config configurations describe "$name" >/dev/null 2>&1 ||
+    gcloud config configurations create "$name" --no-activate --quiet >/dev/null 2>&1 || return 1
+  # With an account set, `config set project` refreshes a token, which fails
+  # outside an agent run: clear it, set the project, then log in again.
+  gcloud --configuration="$name" config unset account --quiet >/dev/null 2>&1 || true
+  gcloud --configuration="$name" config set project "$GCP_PROJECT" --quiet >/dev/null 2>&1 || return 1
+  gcloud --configuration="$name" auth login --cred-file="$wif" --quiet >/dev/null 2>&1 || return 1
+  # Make it the active configuration unless someone set up another one.
+  if [ -z "$active" ] || [ "$active" = "$name" ] ||
+     { [ "$active" = default ] && [ -z "$(gcloud --configuration=default config get account 2>/dev/null)" ]; }; then
+    gcloud config configurations activate "$name" --quiet >/dev/null 2>&1 || return 1
+  else
+    echo "agent-cloud-login: gcloud configuration '$active' stays active; use --configuration=$name" >&2
+  fi
+}
+
+remove_gcp() {
+  # Only the configuration is removed, not the account's stored credential,
+  # which another configuration may share. That credential runs
+  # agent-gcp-token, which refuses to mint while GCP access is turned off.
+  if gcloud config configurations describe "$name" >/dev/null 2>&1; then
+    [ "$(gcloud config configurations list --filter=is_active:true --format='value(name)' 2>/dev/null)" = "$name" ] &&
+      gcloud config configurations activate default --quiet >/dev/null 2>&1
+    gcloud config configurations delete "$name" --quiet >/dev/null 2>&1
+  fi
+  adc_is_ours && rm -f "$adc"
+  rm -f "$wif"
+  return 0
+}
+
+# Drop the [profile coding-agents] section from the AWS config file.
+strip_aws_profile() {
+  [ -f "$aws_cfg" ] || return 0
+  local tmp
+  # mktemp creates the file 0600; then copy the original's mode onto it.
+  tmp="$(mktemp "$aws_cfg.XXXXXX")" || return 1
+  # A header may carry extra spaces, a trailing comment, trailing whitespace
+  # or a CRLF ending; botocore still reads it as the same profile, so match
+  # it the same way.
+  if awk -v n="$name" '
+       BEGIN { re = "^\\[[ \t]*profile[ \t]+" n "[ \t]*\\][ \t\r]*([#;].*)?$" }
+       /^\[/ { skip = ($0 ~ re) }
+       !skip' "$aws_cfg" >"$tmp" && chmod --reference="$aws_cfg" "$tmp" &&
+     mv "$tmp" "$aws_cfg"; then
+    :
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+setup_aws() {
+  mkdir -p "$(dirname "$aws_cfg")" || return 1
+  strip_aws_profile || return 1
+  [ -s "$aws_cfg" ] && [ -n "$(tail -c1 "$aws_cfg")" ] && echo >>"$aws_cfg"
+  cat >>"$aws_cfg" <<CONF || return 1
+[profile $name]
+region = $AWS_REGION
+credential_process = $here/agent-aws-credentials
+CONF
+}
+
+rc=0
+if [ -z "$GCP_SERVICE_ACCOUNT" ] || [ -z "$GCP_WIF_POOL" ]; then
+  remove_gcp
+  echo "agent-cloud-login: GCP_SERVICE_ACCOUNT or GCP_WIF_POOL not set; gcloud agent access removed"
+elif setup_gcp; then
+  echo "agent-cloud-login: gcloud configuration $name uses $GCP_SERVICE_ACCOUNT through workload identity federation"
+else
+  echo "agent-cloud-login: gcloud setup failed" >&2
+  rc=1
+fi
+
+if [ -z "$AWS_ROLE_ARN" ]; then
+  strip_aws_profile
+  echo "agent-cloud-login: AWS_ROLE_ARN not set; aws profile $name removed"
+elif setup_aws; then
+  echo "agent-cloud-login: aws profile $name uses $AWS_ROLE_ARN through web identity"
+else
+  echo "agent-cloud-login: aws setup failed" >&2
+  rc=1
+fi
+exit "$rc"

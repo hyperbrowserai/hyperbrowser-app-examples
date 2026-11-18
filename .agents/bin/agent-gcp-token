@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Executable credential source for GCP workload identity federation (see
+# https://google.aip.dev/auth/4117). gcloud and the Google client libraries
+# run this whenever they need a fresh token; nothing is cached on disk.
+# Requires GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES=1 in the environment.
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+. "$here/../load-env.sh"
+platform="$("$here/agent-platform")"
+
+if [ -z "$GCP_SERVICE_ACCOUNT" ] || [ -z "$GCP_WIF_POOL" ]; then
+  jq -cn '{version: 1, success: false, code: "AGENT_GCP_DISABLED", message: "GCP access is turned off (no GCP_SERVICE_ACCOUNT or GCP_WIF_POOL; see .agents/load-env.sh)"}'
+  exit 1
+fi
+
+# Audience the pool provider accepts by default (no allowed-audiences set).
+audience="https://iam.googleapis.com/${GCP_WIF_POOL}/providers/${platform}"
+err="$(mktemp)"
+trap 'rm -f "$err"' EXIT
+if token="$("$here/agent-oidc-token" "$audience" 2>"$err")"; then
+  exp=$(jq -Rr 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson | .exp' <<<"$token" 2>/dev/null || echo $(( $(date +%s) + 240 )))
+  jq -cn --arg t "$token" --argjson exp "$exp" \
+    '{version: 1, success: true, token_type: "urn:ietf:params:oauth:token-type:jwt", id_token: $t, expiration_time: $exp}'
+else
+  jq -cn --arg msg "$(cat "$err")" \
+    '{version: 1, success: false, code: "AGENT_OIDC_FAILED", message: $msg}'
+  exit 1
+fi

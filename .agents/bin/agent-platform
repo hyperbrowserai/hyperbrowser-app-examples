@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Print "cursor", "devin" or "unknown" for the agent platform of this VM.
+if [ -n "${CURSOR_AGENT_SOCKET:-}" ] || [ -e /run/cursor/api.sock ]; then
+  echo cursor
+elif command -v devin-oidc >/dev/null 2>&1 || [ -e /mnt/host_share/devin-remote ]; then
+  echo devin
+else
+  echo unknown
+fi

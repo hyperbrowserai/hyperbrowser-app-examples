@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# List every device in the tailnet through the Tailscale API. `tailscale
+# status` only shows the peers the policy lets this node reach; this reads
+# the full inventory and opens no network path to any device.
+#
+# Needs the devices:core:read scope on the platform's trust credential
+# (.agents/README.md). Prints name, addresses, tags (or owner), OS and last
+# seen, tab-separated; --json prints the API response unchanged.
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+. "$here/../load-env.sh"
+
+case "$("$here/agent-platform")" in
+  cursor) client_id="$TS_CLIENT_ID_CURSOR"; audience="$TS_AUDIENCE_CURSOR" ;;
+  devin)  client_id="$TS_CLIENT_ID_DEVIN";  audience="$TS_AUDIENCE_DEVIN" ;;
+  *)      client_id=""; audience="" ;;
+esac
+if [ -z "$client_id" ] || [ -z "$audience" ]; then
+  echo "agent-tailscale-devices: no Tailscale trust credential configured for this platform" >&2
+  exit 1
+fi
+
+api=https://api.tailscale.com/api/v2
+# Tokens go through stdin, never the command line.
+id_token="$("$here/agent-oidc-token" "$audience")"
+access_token="$(curl -fsS --max-time 20 "$api/oauth/token-exchange" \
+  --data-urlencode "client_id=$client_id" --data-urlencode jwt@- <<<"$id_token" | jq -er .access_token)"
+unset id_token
+
+body="$(mktemp)"
+trap 'rm -f "$body"' EXIT
+status="$(curl -sS --max-time 30 -o "$body" -w '%{http_code}' -H @- "$api/tailnet/-/devices" \
+  <<<"Authorization: Bearer $access_token")"
+case "$status" in
+  200) devices="$(cat "$body")" ;;
+  401|403|404)
+    echo "agent-tailscale-devices: the device list was refused (HTTP $status); add the devices:core:read scope to the trust credential" >&2
+    exit 1 ;;
+  *)
+    echo "agent-tailscale-devices: the device list request failed (HTTP $status)" >&2
+    exit 1 ;;
+esac
+
+if [ "${1:-}" = --json ]; then
+  printf '%s\n' "$devices"
+else
+  # .name is the tailnet (MagicDNS) name; .hostname is what the OS reports.
+  jq -r '.devices | map(.short = (.name | split(".")[0])) | sort_by(.short)[] |
+    [.short, (.addresses | join(",")), ((.tags // [.user]) | join(",")), .os, .lastSeen] | @tsv' <<<"$devices"
+fi
