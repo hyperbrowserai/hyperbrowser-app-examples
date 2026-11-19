@@ -17,6 +17,14 @@ set -uo pipefail
 
 here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 . "$here/../load-env.sh"
+# One run at a time per user: agent-access start can leave a background retry
+# running when start runs again, and two runs rewriting the AWS profile at
+# once could leave it duplicated.
+exec 8>>"/tmp/agent-cloud-login.$(id -u).lock"
+if ! flock -w 150 8; then
+  echo "agent-cloud-login: another run still holds the lock; skipping" >&2
+  exit 1
+fi
 platform="$("$here/agent-platform")"
 name=coding-agents
 gdir="$HOME/.config/gcloud"
