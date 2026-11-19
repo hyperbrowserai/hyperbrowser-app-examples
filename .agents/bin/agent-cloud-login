@@ -125,8 +125,12 @@ rc=0
 # AWS first: it only writes a file, so a stalled GCP login cannot use up the
 # caller's time limit before the AWS profile exists.
 if [ -z "$AWS_ROLE_ARN" ]; then
-  strip_aws_profile
-  echo "agent-cloud-login: AWS_ROLE_ARN not set; aws profile $name removed"
+  if strip_aws_profile; then
+    echo "agent-cloud-login: AWS_ROLE_ARN not set; aws profile $name removed"
+  else
+    echo "agent-cloud-login: AWS_ROLE_ARN not set, but removing aws profile $name failed" >&2
+    rc=1
+  fi
 elif setup_aws; then
   echo "agent-cloud-login: aws profile $name uses $AWS_ROLE_ARN through web identity"
 else
