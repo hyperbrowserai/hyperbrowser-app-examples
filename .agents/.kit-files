@@ -1,0 +1,12 @@
+# Files installed by hyperbrowserai/browserctrl .agents/sync-kit; it removes
+# only these when the kit drops one.
+bin/agent-access
+bin/agent-aws-credentials
+bin/agent-cloud-login
+bin/agent-gcp-token
+bin/agent-oidc-token
+bin/agent-platform
+bin/agent-tailscale-devices
+bin/agent-tailscale-up
+load-env.sh
+README.md

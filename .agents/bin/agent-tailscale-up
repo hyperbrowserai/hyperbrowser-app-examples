@@ -6,7 +6,8 @@
 # long-lived is stored on the VM. Needs TS_CLIENT_ID_<PLATFORM> and
 # TS_AUDIENCE_<PLATFORM> (.agents/load-env.sh).
 # Fallback: a Tailscale OAuth client secret (does not expire) provided as the
-# TS_OAUTH_CLIENT_SECRET platform secret.
+# TS_OAUTH_CLIENT_SECRET platform secret, used when no client ID is set for
+# the platform or the platform's token cannot be minted.
 #
 # Idempotent: exits early when the node is already connected. Never run it
 # during a snapshot build; each session must register its own node. Every
@@ -32,22 +33,9 @@ if [ "${1:-}" = --background ]; then
   exit 0
 fi
 . "$here/../load-env.sh"
-platform="$("$here/agent-platform")"
-# Cursor's token socket can appear a moment after boot.
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  [ "$platform" != unknown ] && break
-  sleep 1
-  platform="$("$here/agent-platform")"
-done
 
-case "$platform" in
-  cursor) client_id="$TS_CLIENT_ID_CURSOR"; audience="$TS_AUDIENCE_CURSOR" ;;
-  devin)  client_id="$TS_CLIENT_ID_DEVIN";  audience="$TS_AUDIENCE_DEVIN" ;;
-  *)      client_id=""; audience="" ;;
-esac
-
-if [ -z "$client_id" ] && [ -z "${TS_OAUTH_CLIENT_SECRET:-}" ]; then
-  echo "agent-tailscale-up: no Tailscale credential configured for platform '$platform'; skipping"
+if [ -z "$TS_CLIENT_ID_CURSOR$TS_CLIENT_ID_DEVIN" ] && [ -z "${TS_OAUTH_CLIENT_SECRET:-}" ]; then
+  echo "agent-tailscale-up: no Tailscale credential configured; skipping"
   exit 0
 fi
 
@@ -118,6 +106,24 @@ if [ "$(ts_state)" = Running ]; then
   exit 0
 fi
 
+# Cursor's token socket can appear a while after boot. The watcher calls this
+# join again later, so an undetected platform is a failure, not a skip.
+platform="$("$here/agent-platform")"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ "$platform" != unknown ] && break
+  sleep 1
+  platform="$("$here/agent-platform")"
+done
+case "$platform" in
+  cursor) client_id="$TS_CLIENT_ID_CURSOR"; audience="$TS_AUDIENCE_CURSOR" ;;
+  devin)  client_id="$TS_CLIENT_ID_DEVIN";  audience="$TS_AUDIENCE_DEVIN" ;;
+  *)      client_id=""; audience="" ;;
+esac
+if [ -z "$client_id" ] && [ -z "${TS_OAUTH_CLIENT_SECRET:-}" ]; then
+  echo "agent-tailscale-up: no Tailscale credential for platform '$platform' yet" >&2
+  exit 1
+fi
+
 if ! ts status --json >/dev/null 2>&1; then
   # Cursor VMs have no usable TUN device, so run in userspace mode and expose
   # SOCKS5/HTTP proxies (see .agents/README.md). Elsewhere use kernel TUN.
@@ -142,11 +148,13 @@ up=(--hostname="$hostname" --advertise-tags="$TS_TAGS" --accept-routes --reset -
 # stays ours so the trap can delete it.
 keyfile="$(mktemp -p /dev/shm)"
 trap 'rm -f "$keyfile"' EXIT
-if [ -n "$client_id" ]; then
-  token="$("$here/agent-oidc-token" "$audience")"
+if [ -n "$client_id" ] && token="$("$here/agent-oidc-token" "$audience")"; then
   printf '%s' "$token" >"$keyfile"
   unset token
   ts_up "${up[@]}" --client-id="${client_id}?ephemeral=true&preauthorized=true" --id-token="file:$keyfile"
+elif [ -z "${TS_OAUTH_CLIENT_SECRET:-}" ]; then
+  echo "agent-tailscale-up: could not mint a $platform token and no TS_OAUTH_CLIENT_SECRET is set" >&2
+  exit 1
 else
   printf '%s?ephemeral=true&preauthorized=true' "$TS_OAUTH_CLIENT_SECRET" >"$keyfile"
   ts_up "${up[@]}" --auth-key="file:$keyfile"

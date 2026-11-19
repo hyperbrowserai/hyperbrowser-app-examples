@@ -20,8 +20,9 @@ err="$(mktemp)"
 trap 'rm -f "$err"' EXIT
 if token="$("$here/agent-oidc-token" "$audience" 2>"$err")"; then
   exp=$(jq -Rr 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson | .exp' <<<"$token" 2>/dev/null || echo $(( $(date +%s) + 240 )))
-  jq -cn --arg t "$token" --argjson exp "$exp" \
-    '{version: 1, success: true, token_type: "urn:ietf:params:oauth:token-type:jwt", id_token: $t, expiration_time: $exp}'
+  # The token goes through stdin, never on a command line.
+  jq -cR --argjson exp "$exp" \
+    '{version: 1, success: true, token_type: "urn:ietf:params:oauth:token-type:jwt", id_token: ., expiration_time: $exp}' <<<"$token"
 else
   jq -cn --arg msg "$(cat "$err")" \
     '{version: 1, success: false, code: "AGENT_OIDC_FAILED", message: $msg}'

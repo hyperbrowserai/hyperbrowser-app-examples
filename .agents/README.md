@@ -14,7 +14,9 @@ the snapshot.
 - `bin/agent-access start` (Cursor start step) writes the `coding-agents`
   gcloud configuration and AWS profile and keeps the VM on the tailnet.
 - The resource names the helpers use come from the `AGENT_ENV_CONF` Cursor
-  team secret (see `load-env.sh`); without it, access stays off.
+  team secret (see `load-env.sh`); without it, access stays off. The
+  `GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES=1` team secret lets gcloud and
+  the Google client libraries run the token helper.
 
 Devin sets up the same access for every repository from the browserctrl
 blueprint, so these copies are only used on Cursor.

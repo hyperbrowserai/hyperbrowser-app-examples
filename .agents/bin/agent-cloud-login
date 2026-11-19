@@ -15,6 +15,19 @@ set -uo pipefail
 here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 . "$here/../load-env.sh"
 platform="$("$here/agent-platform")"
+# Cursor's token socket can appear a while after boot. The GCP audience names
+# the platform, so wait for it rather than write one for "unknown", and change
+# nothing if it never appears (a snapshot build, or a machine that is not an
+# agent VM).
+for _ in $(seq 1 30); do
+  [ "$platform" != unknown ] && break
+  sleep 1
+  platform="$("$here/agent-platform")"
+done
+if [ "$platform" = unknown ]; then
+  echo "agent-cloud-login: no Cursor or Devin identity on this machine; gcloud and aws left unchanged" >&2
+  exit 1
+fi
 
 name=coding-agents
 gdir="$HOME/.config/gcloud"
@@ -112,6 +125,17 @@ CONF
 }
 
 rc=0
+# AWS first: it only writes a file, so a stalled GCP login cannot use up the
+# caller's time limit before the AWS profile exists.
+if [ -z "$AWS_ROLE_ARN" ]; then
+  strip_aws_profile
+  echo "agent-cloud-login: AWS_ROLE_ARN not set; aws profile $name removed"
+elif setup_aws; then
+  echo "agent-cloud-login: aws profile $name uses $AWS_ROLE_ARN through web identity"
+else
+  echo "agent-cloud-login: aws setup failed" >&2
+  rc=1
+fi
 if [ -z "$GCP_SERVICE_ACCOUNT" ] || [ -z "$GCP_WIF_POOL" ]; then
   remove_gcp
   echo "agent-cloud-login: GCP_SERVICE_ACCOUNT or GCP_WIF_POOL not set; gcloud agent access removed"
@@ -122,13 +146,4 @@ else
   rc=1
 fi
 
-if [ -z "$AWS_ROLE_ARN" ]; then
-  strip_aws_profile
-  echo "agent-cloud-login: AWS_ROLE_ARN not set; aws profile $name removed"
-elif setup_aws; then
-  echo "agent-cloud-login: aws profile $name uses $AWS_ROLE_ARN through web identity"
-else
-  echo "agent-cloud-login: aws setup failed" >&2
-  rc=1
-fi
 exit "$rc"

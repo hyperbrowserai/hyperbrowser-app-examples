@@ -5,9 +5,9 @@
 # start.sh; other repositories get this kit through .agents/sync-kit.
 #
 #   agent-access install  Build step, cached in the environment snapshot:
-#                         installs jq, gcloud, aws and tailscale when missing,
-#                         links the helpers into /usr/local/bin and sets the
-#                         shell environment gcloud and aws need.
+#                         installs curl, jq, gcloud, aws and tailscale when
+#                         missing, links the helpers into /usr/local/bin and
+#                         sets the shell environment gcloud and aws need.
 #   agent-access start    Every boot: saves the resource names, writes the
 #                         coding-agents gcloud configuration and AWS profile,
 #                         and keeps the VM on the tailnet in the background.
@@ -46,39 +46,60 @@ apt_repo() { # name key-url key-file line
   esac && echo "$4" | sudo tee "/etc/apt/sources.list.d/$1.list" >/dev/null
 }
 
+apt_install() { sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@"; }
+
+# Each tool is installed on its own, so one failure (an unreachable vendor
+# repository, say) does not cost the others.
 install_tools() {
-  local need=() codename
-  command -v jq >/dev/null || need+=(jq)
-  command -v unzip >/dev/null || need+=(unzip)
-  command -v gpg >/dev/null || need+=(gnupg)
-  command -v gcloud >/dev/null || need+=(google-cloud-cli)
-  command -v tailscale >/dev/null || need+=(tailscale)
-  if [ "${#need[@]}" -gt 0 ]; then
+  local base=() vendor=() codename rc=0
+  command -v curl >/dev/null || base+=(curl ca-certificates)
+  command -v jq >/dev/null || base+=(jq)
+  command -v unzip >/dev/null || base+=(unzip)
+  command -v gcloud >/dev/null || vendor+=(google-cloud-cli)
+  command -v tailscale >/dev/null || vendor+=(tailscale)
+  [ "${#vendor[@]}" -gt 0 ] && ! command -v gpg >/dev/null && base+=(gnupg)
+
+  if [ "${#base[@]}" -gt 0 ] || [ "${#vendor[@]}" -gt 0 ]; then
+    sudo apt-get update -qq || { log "apt-get update failed"; rc=1; }
+  fi
+  if [ "${#base[@]}" -gt 0 ]; then
+    apt_install "${base[@]}" || { log "installing ${base[*]} failed"; rc=1; }
+  fi
+  if [ "${#vendor[@]}" -gt 0 ]; then
     codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
     sudo install -d -m 0755 /etc/apt/keyrings
-    command -v gpg >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gnupg
-    if [[ " ${need[*]} " == *" google-cloud-cli "* ]]; then
+    if [[ " ${vendor[*]} " == *" google-cloud-cli "* ]]; then
       apt_repo google-cloud-sdk https://packages.cloud.google.com/apt/doc/apt-key.gpg /etc/apt/keyrings/cloud.google.gpg \
-        "deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main"
+        "deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" ||
+        log "adding the Google Cloud repository failed"
     fi
-    if [[ " ${need[*]} " == *" tailscale "* ]]; then
+    if [[ " ${vendor[*]} " == *" tailscale "* ]]; then
       apt_repo tailscale "https://pkgs.tailscale.com/stable/ubuntu/${codename}.noarmor.gpg" /etc/apt/keyrings/tailscale.gpg \
-        "deb [signed-by=/etc/apt/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/ubuntu ${codename} main"
+        "deb [signed-by=/etc/apt/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/ubuntu ${codename} main" ||
+        log "adding the Tailscale repository failed"
     fi
-    sudo apt-get update -qq &&
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${need[@]}" ||
-      { log "installing ${need[*]} failed"; return 1; }
+    sudo apt-get update -qq || log "apt-get update failed"
+    local pkg
+    for pkg in "${vendor[@]}"; do
+      apt_install "$pkg" || { log "installing $pkg failed"; rc=1; }
+    done
     # Tailscale joins per session (agent-tailscale-up), never in the snapshot.
     sudo systemctl disable --now tailscaled >/dev/null 2>&1 || true
   fi
+
   if ! command -v aws >/dev/null; then
     local tmp
     tmp="$(mktemp -d)"
-    curl -fsSLo "$tmp/awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" &&
-      unzip -q "$tmp/awscliv2.zip" -d "$tmp" && sudo "$tmp/aws/install" ||
-      { rm -rf "$tmp"; log "installing the AWS CLI failed"; return 1; }
+    if curl -fsSLo "$tmp/awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" &&
+       unzip -q "$tmp/awscliv2.zip" -d "$tmp" && sudo "$tmp/aws/install"; then
+      :
+    else
+      log "installing the AWS CLI failed"
+      rc=1
+    fi
     rm -rf "$tmp"
   fi
+  return "$rc"
 }
 
 shell_env() {
@@ -99,8 +120,7 @@ case "${1:-}" in
     save_conf
     install_tools || true
     shell_env || log "linking the helpers failed"
-    export GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES=1
-    timeout 60 "$here/agent-cloud-login" || log "agent-cloud-login failed; gcloud/aws stay unauthenticated"
+    # No login here: a snapshot build has no agent identity. start logs in.
     ;;
   start)
     save_conf

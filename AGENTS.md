@@ -8,7 +8,8 @@ through short-lived platform OIDC tokens (`.agents/README.md`):
 - gcloud: configuration `coding-agents`; check with `gcloud auth list`. If
   another configuration is active, add `--configuration=coding-agents`.
 - aws: profile `coding-agents`, read-only; check with
-  `aws sts get-caller-identity`.
+  `aws sts get-caller-identity`. If `AWS_PROFILE` is not set in the shell,
+  add `--profile coding-agents`.
 - tailscale: the VM joins the tailnet on its own and rejoins after sleeping.
   If `tailscale status` shows no connection, run `agent-tailscale-up`.
   `agent-tailscale-devices` lists the tailnet's devices.

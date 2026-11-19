@@ -25,7 +25,7 @@ api=https://api.tailscale.com/api/v2
 # Tokens go through stdin, never the command line.
 id_token="$("$here/agent-oidc-token" "$audience")"
 access_token="$(curl -fsS --max-time 20 "$api/oauth/token-exchange" \
-  --data-urlencode "client_id=$client_id" --data-urlencode jwt@- <<<"$id_token" | jq -er .access_token)"
+  --data-urlencode "client_id=$client_id" --data-urlencode jwt@- < <(printf '%s' "$id_token") | jq -er .access_token)"
 unset id_token
 
 body="$(mktemp)"
