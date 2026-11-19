@@ -16,8 +16,12 @@ _agent_env_parse() {
     [[ "$line" =~ ^[[:space:]]*([A-Z_][A-Z0-9_]*)=(\"([^\"]*)\"|\'([^\']*)\'|([^[:space:]\"\'#]*))[[:space:]]*(#.*)?$ ]] || continue
     name="${BASH_REMATCH[1]}"
     value="${BASH_REMATCH[3]}${BASH_REMATCH[4]}${BASH_REMATCH[5]}"
-    [[ "$_agent_env_names" == *" $name "* ]] && printf -v "$name" '%s' "$value"
+    if [[ "$_agent_env_names" == *" $name "* ]]; then
+      printf -v "$name" '%s' "$value"
+    fi
   done
+  # Helpers source this under set -e: an ignored last line must not fail it.
+  return 0
 }
 _agent_env_dir="$(dirname "${BASH_SOURCE[0]}")"
 if [ -f "$_agent_env_dir/agent-env.conf" ]; then

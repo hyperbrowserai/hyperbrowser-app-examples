@@ -10,25 +10,14 @@
 # Other configurations, profiles and credentials are left alone. GCP and AWS
 # are handled independently, and an empty setting in agent-env.conf removes
 # what an earlier run set up. Safe to run again; it never needs the network.
+# The AWS profile does not depend on the platform and is written at once; the
+# GCP configuration waits up to 30s for the platform's identity and exits 1
+# without it, so callers can retry.
 set -uo pipefail
 
 here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 . "$here/../load-env.sh"
 platform="$("$here/agent-platform")"
-# Cursor's token socket can appear a while after boot. The GCP audience names
-# the platform, so wait for it rather than write one for "unknown", and change
-# nothing if it never appears (a snapshot build, or a machine that is not an
-# agent VM).
-for _ in $(seq 1 30); do
-  [ "$platform" != unknown ] && break
-  sleep 1
-  platform="$("$here/agent-platform")"
-done
-if [ "$platform" = unknown ]; then
-  echo "agent-cloud-login: no Cursor or Devin identity on this machine; gcloud and aws left unchanged" >&2
-  exit 1
-fi
-
 name=coding-agents
 gdir="$HOME/.config/gcloud"
 wif="$gdir/agent-wif.json"
@@ -136,9 +125,22 @@ else
   echo "agent-cloud-login: aws setup failed" >&2
   rc=1
 fi
+# The GCP audience names the platform. Cursor's token socket can appear a
+# while after boot, so wait for it rather than write one for "unknown", and
+# leave gcloud alone if it never appears (the caller retries).
+if [ -n "$GCP_SERVICE_ACCOUNT" ] && [ -n "$GCP_WIF_POOL" ]; then
+  for _ in $(seq 1 30); do
+    [ "$platform" != unknown ] && break
+    sleep 1
+    platform="$("$here/agent-platform")"
+  done
+fi
 if [ -z "$GCP_SERVICE_ACCOUNT" ] || [ -z "$GCP_WIF_POOL" ]; then
   remove_gcp
   echo "agent-cloud-login: GCP_SERVICE_ACCOUNT or GCP_WIF_POOL not set; gcloud agent access removed"
+elif [ "$platform" = unknown ]; then
+  echo "agent-cloud-login: no Cursor or Devin identity yet; gcloud left unchanged" >&2
+  rc=1
 elif setup_gcp; then
   echo "agent-cloud-login: gcloud configuration $name uses $GCP_SERVICE_ACCOUNT through workload identity federation"
 else

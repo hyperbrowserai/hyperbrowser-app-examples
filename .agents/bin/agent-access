@@ -127,7 +127,14 @@ case "${1:-}" in
     # A snapshot from an older kit may lack the links.
     [ -e /usr/local/bin/agent-tailscale-up ] || shell_env || true
     export GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES=1
-    timeout 60 "$here/agent-cloud-login" || log "agent-cloud-login failed; gcloud/aws may stay unauthenticated"
+    # The AWS profile is written at once. The GCP login needs the platform's
+    # identity, which can appear late, so keep trying in the background for
+    # up to 10 minutes rather than give up for the session.
+    if ! timeout 90 "$here/agent-cloud-login"; then
+      log "gcloud is not configured yet; retrying in the background (log: /tmp/agent-cloud-login.log)"
+      setsid nohup bash -c 'for _ in $(seq 1 20); do sleep 30; timeout 90 "$1" && exit 0; done; exit 1' \
+        agent-cloud-login-retry "$here/agent-cloud-login" >>/tmp/agent-cloud-login.log 2>&1 </dev/null &
+    fi
     "$here/agent-tailscale-up" --background || log "could not start the tailnet watcher"
     ;;
   *)
